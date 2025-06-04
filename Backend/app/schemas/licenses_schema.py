@@ -1,14 +1,14 @@
 from typing import Optional
 from pydantic import BaseModel, EmailStr
 
-class UserAccount(BaseModel):
+class licenses(BaseModel):
     No: str
     username: str
     password: str
     gmail: str
     mail_password: str
 
-class UpdateUserAccount(BaseModel):
+class Updatelicenses(BaseModel):
     No: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
