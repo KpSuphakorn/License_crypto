@@ -6,30 +6,34 @@ import smtplib
 import os
 from email.mime.text import MIMEText
 from email.header import Header
-from email.utils import parsedate_to_datetime
+from email.utils import parsedate_to_datetime, parseaddr
 from zoneinfo import ZoneInfo
-
 from dotenv import load_dotenv
 
 load_dotenv()
 
 POLICE_EMAIL = os.getenv("POLICE_EMAIL")
 POLICE_PASSWORD = os.getenv("POLICE_PASSWORD")
+LICENSE_EMAIL = os.getenv("LICENSE_EMAIL")
+LICENSE_PASSWORD = os.getenv("LICENSE_PASSWORD")
 IMAP_SERVER = os.getenv("IMAP_SERVER")
 SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT"))
 
 router = APIRouter(prefix="/otp", tags=["OTP"])
 
-# === 1. อ่าน OTP จากเมล ===
+
 @router.get("/get")
-def get_otp(subject_keyword: str = Query("OTP", description="Keyword in subject")):
+def get_otp(
+    subject_keyword: str = Query("OTP", description="Keyword in subject"),
+    from_email: str = Query(..., description="Original sender email"),
+):
     try:
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
         mail.login(POLICE_EMAIL, POLICE_PASSWORD)
         mail.select("inbox")
 
-        result, data = mail.search(None, f'(SUBJECT "{subject_keyword}")')
+        result, data = mail.search(None, f'(TEXT "{subject_keyword}")')
         if result != "OK":
             raise HTTPException(status_code=500, detail="Error searching inbox")
 
@@ -37,50 +41,54 @@ def get_otp(subject_keyword: str = Query("OTP", description="Keyword in subject"
         if not email_ids:
             return {"message": "No OTP emails found"}
 
-        latest_email_id = email_ids[-1]
-        result, data = mail.fetch(latest_email_id, "(RFC822)")
-        raw_email = data[0][1]
-        message = email.message_from_bytes(raw_email)
+        for email_id in reversed(email_ids):
+            result, data = mail.fetch(email_id, "(RFC822)")
+            raw_email = data[0][1]
+            message = email.message_from_bytes(raw_email)
 
-        # ดึงข้อความจาก email (รองรับทั้ง HTML และ plain text)
-        msg_body = ""
-        if message.is_multipart():
-            for part in message.walk():
-                content_type = part.get_content_type()
-                if content_type == "text/html":
-                    msg_body = part.get_payload(decode=True).decode()
-                    break
-                elif content_type == "text/plain":
-                    msg_body = part.get_payload(decode=True).decode()
-        else:
-            msg_body = message.get_payload(decode=True).decode()
+            from_addr = parseaddr(message["From"])[1]
+            if from_addr.strip().lower() != from_email.strip().lower():
+                continue
 
-        # ค้นหา OTP ที่เป็นเลข 6 หลัก
-        otp_match = re.search(r"\b\d{6}\b", msg_body)
-        if not otp_match:
-            return {"message": "OTP not found in email"}
+            msg_body = ""
+            if message.is_multipart():
+                for part in message.walk():
+                    content_type = part.get_content_type()
+                    if content_type in ("text/html", "text/plain"):
+                        msg_body = part.get_payload(decode=True).decode()
+                        break
+            else:
+                msg_body = message.get_payload(decode=True).decode()
 
-        # แปลงเวลาเป็นเวลาไทย
-        email_datetime = parsedate_to_datetime(message["Date"])
-        thai_time = email_datetime.astimezone(ZoneInfo("Asia/Bangkok"))
-        formatted_date = thai_time.strftime("%Y-%m-%d %H:%M:%S")
+            otp_match = re.search(r"\b\d{6}\b", msg_body)
+            if not otp_match:
+                continue
 
-        return {
-            "otp": otp_match.group(0),
-            "from": message["From"],
-            "subject": message["Subject"],
-            "date": formatted_date
-        }
+            email_datetime = parsedate_to_datetime(message["Date"])
+            thai_time = email_datetime.astimezone(ZoneInfo("Asia/Bangkok"))
+            formatted_date = thai_time.strftime("%Y-%m-%d %H:%M:%S")
+
+            return {
+                "otp": otp_match.group(0),
+                "from": message["From"],
+                "to": message.get("To", ""),
+                "subject": message["Subject"],
+                "date": formatted_date
+            }
+
+        return {"message": "No matching OTP email found from specified sender"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# === 2. Mock ส่งอีเมล OTP แบบ HTML ===
+
 @router.post("/mock-send")
-def mock_send_otp_email(otp: str = Query(..., description="OTP to send")):
+def mock_send_otp_email(
+    otp: str = Query(..., description="OTP to send"),
+    to_email: str = Query(..., description="Email address to send OTP to")
+):
     try:
         subject = "รหัส OTP สำหรับการเข้าใช้งานระบบ"
-
         html_body = f"""
         <html>
         <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f2f2f2; padding: 30px;">
@@ -99,16 +107,16 @@ def mock_send_otp_email(otp: str = Query(..., description="OTP to send")):
 
         msg = MIMEText(html_body, "html", "utf-8")
         msg["Subject"] = Header(subject, "utf-8")
-        msg["From"] = "Chainalysis <" + POLICE_EMAIL + ">"
-        msg["To"] = POLICE_EMAIL
+        msg["From"] = f"License <{LICENSE_EMAIL}>"
+        msg["To"] = to_email
 
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
-        server.login(POLICE_EMAIL, POLICE_PASSWORD)
-        server.sendmail(POLICE_EMAIL, [POLICE_EMAIL], msg.as_string())
+        server.login(LICENSE_EMAIL, LICENSE_PASSWORD)
+        server.sendmail(LICENSE_EMAIL, [to_email], msg.as_string())
         server.quit()
 
-        return {"message": "Mock OTP email sent successfully"}
+        return {"message": f"Mock OTP email sent to {to_email}"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
