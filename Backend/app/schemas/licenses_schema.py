@@ -7,6 +7,7 @@ class licenses(BaseModel):
     password: str
     gmail: str
     mail_password: str
+    is_available: bool
 
 class Updatelicenses(BaseModel):
     No: Optional[str] = None
@@ -14,3 +15,4 @@ class Updatelicenses(BaseModel):
     password: Optional[str] = None
     gmail: Optional[str] = None
     mail_password: Optional[str] = None
+    is_available: Optional[bool] = None
