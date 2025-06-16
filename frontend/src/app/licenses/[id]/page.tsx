@@ -28,8 +28,12 @@ export default function LicenseDetailsPage({
   useEffect(() => {
     const fetchLicenseDetails = async () => {
       try {
-        // Fetch specific license data using the ID from the URL
-        const response = await fetch(`http://127.0.0.1:5000/licenses/${licenseId}`);
+        const token = localStorage.getItem('token');
+        const response = await fetch(`http://127.0.0.1:5000/licenses/${licenseId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
