@@ -22,10 +22,13 @@ export default function LoginPage() {
     setLoading(true);
     
     try {
+      // Remove formatting from phone number before sending to backend
+      const cleanPhoneNumber = phone.replace(/\D/g, '');
+      
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number: phone, password }),
+        body: JSON.stringify({ phone_number: cleanPhoneNumber, password }),
       });
       
       if (!response.ok) {
