@@ -24,7 +24,7 @@ const Navbar: React.FC<NavbarProps> = ({ userInfo, onRefresh, isRefreshing, onLo
             <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
               License Management System
             </h1>
-            <p className="text-sm text-gray-500">Managing 12 licenses for 200+ users</p>
+            <p className="text-sm text-gray-500">Automate Management System</p>
           </div>
         </div>
         <div className="flex items-center space-x-4">
