@@ -214,7 +214,7 @@ export default function LicenseManagementDashboard() {
               <option value="all">All Licenses</option>
               <option value="available">Available</option>
               <option value="in-use">In Use</option>
-              <option value="queued">Has Queue</option>
+              {/* <option value="queued">Has Queue</option> */}
             </select>
             
             <div className="flex bg-white/80 backdrop-blur-sm rounded-xl border border-white/30 p-1">

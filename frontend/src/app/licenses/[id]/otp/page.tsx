@@ -11,10 +11,9 @@ import {
   ArrowLeft, 
   AlertCircle, 
   Timer,
+  Mail,
   User,
-  Zap,
-  Eye,
-  EyeOff
+  Zap
 } from 'lucide-react';
 
 interface OtpData {
@@ -35,6 +34,7 @@ interface LicenseData {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const FETCH_EMAIL = process.env.NEXT_PUBLIC_FETCH_EMAIL;
 
 export default function OtpPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -47,8 +47,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const [copied, setCopied] = useState(false);
   const [isExtending, setIsExtending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [showFullOtp, setShowFullOtp] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -56,7 +54,7 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
       try {
         setLoading(true);
         // Fetch OTP data
-        const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&from_email=suphakorn850@gmail.com`);
+        const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&from_email=${FETCH_EMAIL}`);
         if (!otpRes.ok) throw new Error(`OTP fetch error: ${otpRes.status}`);
         const otpJson: OtpData = await otpRes.json();
         setOtpData(otpJson);
@@ -85,27 +83,8 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
       setTimeLeft(prev => Math.max(0, prev - 1));
     }, 1000);
 
-    return () => {
-      clearInterval(intervalId);
-    };
+    return () => clearInterval(intervalId);
   }, [licenseId]);
-
-  // Add notification effect for time warnings
-  useEffect(() => {
-    if (timeLeft === 900) { // 15 minutes
-      showNotification('⚠️ เหลือเวลา 15 นาที กรุณาเตรียมต่อเวลา!');
-      playNotificationSound();
-    } else if (timeLeft === 300) { // 5 minutes
-      showNotification('🚨 เหลือเวลา 5 นาที เท่านั้น!');
-      playNotificationSound();
-    } else if (timeLeft === 60) { // 1 minute
-      showNotification('⏰ เหลือเวลาอีก 1 นาที!');
-      playNotificationSound();
-    } else if (timeLeft === 0) {
-      showNotification('⏱️ หมดเวลาแล้ว กรุณาต่อเวลาใหม่');
-      playNotificationSound();
-    }
-  }, [timeLeft]);
 
   const hours = Math.floor(timeLeft / 3600);
   const minutes = Math.floor((timeLeft % 3600) / 60);
@@ -123,60 +102,35 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
 
   const timeStatus = getTimeStatus();
 
-  const showNotification = (message: string) => {
-    setNotification(message);
-    setTimeout(() => setNotification(null), 5000);
-  };
-
-  const playNotificationSound = () => {
-    if (typeof window !== 'undefined') {
-      try {
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmAfBzhK3Om95Bf');
-        audio.volume = 0.3;
-        audio.play().catch(() => {}); // Ignore errors if audio fails
-      } catch (e) {
-        // Ignore audio errors
-      }
-    }
-  };
-
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      showNotification('✅ คัดลอกรหัส OTP เรียบร้อยแล้ว!');
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy text: ', err);
-      showNotification('❌ ไม่สามารถคัดลอกได้ กรุณาลองใหม่');
     }
   };
 
   const handleExtendTime = async () => {
     if (timeLeft <= 900) {
       setIsExtending(true);
-      showNotification('🔄 กำลังต่อเวลา...');
       // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       setTimeLeft(120 * 60); // Reset to 2 hours
       setIsExtending(false);
-      showNotification('✅ ต่อเวลาเรียบร้อยแล้ว! เพิ่มเวลา 2 ชั่วโมง');
-      playNotificationSound();
     }
   };
 
   const handleRefreshOtp = async () => {
     setRefreshing(true);
-    showNotification('🔄 กำลังรีเฟรช OTP...');
     try {
       const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&from_email=suphakorn850@gmail.com`);
       if (!otpRes.ok) throw new Error(`OTP refresh error: ${otpRes.status}`);
       const otpJson: OtpData = await otpRes.json();
       setOtpData(otpJson);
-      showNotification('✅ รีเฟรช OTP เรียบร้อยแล้ว!');
     } catch (err: any) {
       console.error('Failed to refresh OTP:', err);
-      showNotification('❌ ไม่สามารถรีเฟรช OTP ได้');
     } finally {
       setRefreshing(false);
     }
@@ -247,21 +201,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50">
-      {/* Notification Toast */}
-      {notification && (
-        <div className="fixed top-4 right-4 z-50 bg-white rounded-lg shadow-lg border-l-4 border-blue-500 p-4 max-w-sm animate-slide-in">
-          <div className="flex items-center">
-            <div className="text-sm text-gray-700">{notification}</div>
-            <button
-              onClick={() => setNotification(null)}
-              className="ml-2 text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center mb-8">
@@ -270,7 +209,7 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
             className="flex items-center text-gray-600 hover:text-gray-900 transition-colors group"
           >
             <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
-            กลับไปหน้ารายละเอียด License
+            กลับไปรายละเอียด License
           </button>
         </div>
 
@@ -279,16 +218,26 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
           <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
             {/* Header Section */}
             <div className="bg-gradient-to-r from-green-600 to-blue-600 px-8 py-6">
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mr-4">
-                  <Shield className="w-6 h-6 text-white" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mr-4">
+                    <Shield className="w-6 h-6 text-black" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-white">
+                      รหัส OTP
+                    </h1>
+                    <p className="text-green-100 text-sm">License No. {licenseData.No}</p>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-white">
-                    รหัส OTP
-                  </h1>
-                  <p className="text-green-100 text-sm">License No. {licenseData.No}</p>
-                </div>
+                <button
+                  onClick={handleRefreshOtp}
+                  disabled={refreshing}
+                  className="p-2 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition-all disabled:opacity-50"
+                  title="รีเฟรช OTP"
+                >
+                  <RefreshCw className={`w-5 h-5 text-black ${refreshing ? 'animate-spin' : ''}`} />
+                </button>
               </div>
             </div>
 
@@ -300,41 +249,22 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
                   รหัส OTP ของคุณ
                 </label>
                 <div className="relative group">
-                  <div 
-                    className="bg-gradient-to-r from-gray-50 to-blue-50 border-2 border-gray-200 rounded-2xl p-6 transition-all group-hover:border-blue-300 cursor-pointer hover:shadow-lg"
-                    onClick={() => copyToClipboard(otpData.otp)}
-                  >
-                    <div className="text-4xl font-mono font-bold text-gray-900 tracking-wider select-all">
-                      {showFullOtp ? otpData.otp : otpData.otp.replace(/./g, '●')}
+                  <div className="bg-gradient-to-r from-gray-50 to-blue-50 border-2 border-gray-200 rounded-2xl p-6 transition-all group-hover:border-blue-300">
+                    <div className="text-4xl font-mono font-bold text-gray-900 tracking-wider">
+                      {otpData.otp}
                     </div>
                   </div>
-                  <div className="absolute top-2 right-2 flex space-x-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowFullOtp(!showFullOtp);
-                      }}
-                      className="p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-all opacity-0 group-hover:opacity-100"
-                      title={showFullOtp ? 'ซ่อนรหัส OTP' : 'แสดงรหัส OTP'}
-                    >
-                      {showFullOtp ? (
-                        <EyeOff className="w-5 h-5 text-gray-400" />
-                      ) : (
-                        <Eye className="w-5 h-5 text-gray-400" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => copyToClipboard(otpData.otp)}
-                      className="p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-all opacity-0 group-hover:opacity-100"
-                      title="คัดลอกรหัส OTP"
-                    >
-                      {copied ? (
-                        <Check className="w-5 h-5 text-green-500" />
-                      ) : (
-                        <Copy className="w-5 h-5 text-gray-400" />
-                      )}
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => copyToClipboard(otpData.otp)}
+                    className="absolute top-2 right-2 p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-all opacity-0 group-hover:opacity-100"
+                    title="คัดลอกรหัส OTP"
+                  >
+                    {copied ? (
+                      <Check className="w-5 h-5 text-green-500" />
+                    ) : (
+                      <Copy className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
                 </div>
                 {copied && (
                   <p className="text-green-600 text-sm mt-2 animate-fade-in">
@@ -364,27 +294,8 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
                   {formattedTime}
                 </div>
 
-                {/* Progress Bar */}
-                <div className="mt-4 w-full max-w-md mx-auto">
-                  <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-1000 ${
-                        timeStatus === 'expired' ? 'bg-red-500' :
-                        timeStatus === 'warning' ? 'bg-red-500' :
-                        timeStatus === 'caution' ? 'bg-yellow-500' :
-                        'bg-green-500'
-                      }`}
-                      style={{ width: `${(timeLeft / (120 * 60)) * 100}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>0 นาที</span>
-                    <span>120 นาที</span>
-                  </div>
-                </div>
-
                 {timeStatus === 'warning' && (
-                  <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4 animate-pulse">
+                  <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
                     <div className="flex items-center text-red-700">
                       <AlertCircle className="w-5 h-5 mr-2" />
                       <span className="text-sm font-medium">
@@ -447,31 +358,11 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
                 <p className="font-medium mb-1">คำแนะนำการใช้งาน</p>
                 <ul className="space-y-1">
                   <li>• คลิกที่รหัส OTP เพื่อคัดลอกไปใช้งาน</li>
-                  <li>• ใช้ปุ่มแสดง/ซ่อนเพื่อความปลอดภัย</li>
                   <li>• ต่อเวลาได้เมื่อเหลือเวลาน้อยกว่า 15 นาที</li>
-                  <li>• ระบบจะแจ้งเตือนเมื่อเวลาใกล้หมด</li>
+                  <li>• กรุณาใช้งานให้เสร็จก่อนหมดเวลา</li>
                 </ul>
               </div>
             </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <button
-              onClick={() => copyToClipboard(otpData.otp)}
-              className="flex items-center justify-center p-3 bg-white border-2 border-blue-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all"
-            >
-              <Copy className="w-4 h-4 text-blue-600 mr-2" />
-              <span className="text-sm text-blue-600 font-medium">คัดลอก OTP</span>
-            </button>
-            <button
-              onClick={handleRefreshOtp}
-              disabled={refreshing}
-              className="flex items-center justify-center p-3 bg-white border-2 border-green-200 rounded-xl hover:border-green-300 hover:bg-green-50 transition-all disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 text-green-600 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-              <span className="text-sm text-green-600 font-medium">รีเฟรช</span>
-            </button>
           </div>
         </div>
       </div>

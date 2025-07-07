@@ -71,7 +71,7 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
-          <p className="text-gray-600 text-lg">กำลังโหลดข้อมูลใบอนุญาต...</p>
+          <p className="text-gray-600 text-lg">กำลังโหลดข้อมูล License...</p>
         </div>
       </div>
     );
@@ -108,7 +108,7 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
               <Shield className="w-8 h-8 text-gray-400" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">ไม่พบข้อมูล</h3>
-            <p className="text-gray-600 mb-6">ไม่พบรายละเอียดใบอนุญาตที่คุณต้องการ</p>
+            <p className="text-gray-600 mb-6">ไม่พบรายละเอียด License ที่คุณต้องการ</p>
             <button
               onClick={handleGoBack}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -131,7 +131,7 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
             className="flex items-center text-gray-600 hover:text-gray-900 transition-colors group"
           >
             <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
-            กลับไปหน้าใบอนุญาต
+            กลับไปหน้า License
           </button>
         </div>
 
@@ -142,11 +142,11 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6">
               <div className="flex items-center">
                 <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mr-4">
-                  <Shield className="w-6 h-6 text-white" />
+                  <Shield className="w-6 h-6 text-black" />
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-white">
-                    ใบอนุญาตหมายเลข {licenseDetails.No || licenseDetails._id}
+                    License หมายเลข {licenseDetails.No || licenseDetails._id}
                   </h1>
                   <p className="text-blue-100 text-sm">รายละเอียดการเข้าถึง</p>
                 </div>
