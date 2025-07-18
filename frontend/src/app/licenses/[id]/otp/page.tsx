@@ -115,7 +115,8 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
 
         // Fetch OTP using license_id and licenseData.gmail
         if (licenseJson.gmail) {
-          const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&license_id=${licenseId}`);
+          const licenseKey = `license${parseInt(licenseJson.No, 10)}`; // เช่น "01" -> 1 -> "license1"
+          const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&license_id=${licenseKey}`);
           if (!otpRes.ok) throw new Error(`OTP fetch error: ${otpRes.status}`);
           const otpJson: OtpData = await otpRes.json();
           setOtpData(otpJson);
