@@ -102,7 +102,7 @@ def request_license(licenses_id: str = Path(...), user: dict = Depends(get_curre
         "is_available": True,  # Keep as available until OTP is requested
         "reserved_by": user.get("user_id"),  # New field to track who reserved it
         "reserved_by_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
-        "reserved_at": datetime.utcnow().isoformat(),
+        "reserved_at": datetime.utcnow().isoformat() + "Z",
         "last_activity": datetime.utcnow().isoformat()
     }
     
@@ -153,26 +153,39 @@ def activate_license(licenses_id: str = Path(...), user: dict = Depends(get_curr
             # User is trying to activate again - if it's the same user and not expired, just return success
             expires_at = licenses.get("expires_at")
             if expires_at:
-                expires_time = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-                if datetime.utcnow() < expires_time:
-                    print("License already active and not expired - returning existing expiration")
-                    return {"message": "License is already active", "expires_at": expires_at}
+                try:
+                    # Handle both Z and non-Z suffixed timestamps
+                    expires_time_str = expires_at.replace('Z', '+00:00') if expires_at.endswith('Z') else expires_at
+                    expires_time = datetime.fromisoformat(expires_time_str)
+                    
+                    # Convert to UTC naive datetime for comparison
+                    if expires_time.tzinfo is not None:
+                        expires_time = expires_time.replace(tzinfo=None)
+                    
+                    if datetime.utcnow() < expires_time:
+                        print("License already active and not expired - returning existing expiration")
+                        # Ensure the returned timestamp has Z suffix for consistency
+                        return_expires_at = expires_at if expires_at.endswith('Z') else expires_at + 'Z'
+                        return {"message": "License is already active", "expires_at": return_expires_at}
+                except ValueError as e:
+                    print(f"Error parsing existing expires_at: {e}")
+                    # Fall through to re-activate with new expiration
         else:
             raise HTTPException(status_code=409, detail="License is already in use by another user")
     
     # Calculate expiration time (2 hours from now)
     expires_at = datetime.utcnow() + timedelta(hours=2)
     
-    print(f"Setting expiration time to: {expires_at.isoformat()}")
+    print(f"Setting expiration time to: {expires_at.isoformat()}Z")
     
     # Activate the license
     update_data = {
         "is_available": False,
         "current_user": user_id,
         "current_user_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
-        "assigned_at": datetime.utcnow().isoformat(),
-        "expires_at": expires_at.isoformat(),
-        "last_activity": datetime.utcnow().isoformat(),
+        "assigned_at": datetime.utcnow().isoformat() + "Z",
+        "expires_at": expires_at.isoformat() + "Z",
+        "last_activity": datetime.utcnow().isoformat() + "Z",
         # Keep reservation info for reference
         "reserved_by": reserved_by,
         "reserved_by_name": licenses.get("reserved_by_name"),
@@ -190,9 +203,9 @@ def activate_license(licenses_id: str = Path(...), user: dict = Depends(get_curr
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="License not found")
     
-    print(f"License activated successfully. Expires at: {expires_at.isoformat()}")
+    print(f"License activated successfully. Expires at: {expires_at.isoformat()}Z")
     
-    return {"message": "License activated successfully", "expires_at": expires_at.isoformat()}
+    return {"message": "License activated successfully", "expires_at": expires_at.isoformat() + "Z"}
 
 @router.post("/{licenses_id}/release")
 def release_license(licenses_id: str = Path(...), user: dict = Depends(get_current_user)):
@@ -222,7 +235,7 @@ def release_license(licenses_id: str = Path(...), user: dict = Depends(get_curre
         "reserved_by": None,  # Clear reservation
         "reserved_by_name": None,  # Clear reservation
         "reserved_at": None,  # Clear reservation
-        "last_activity": datetime.utcnow().isoformat()
+        "last_activity": datetime.utcnow().isoformat() + "Z"
     }
     
     print(f"Releasing license {licenses_id} - clearing all reservations and assignments")
@@ -273,7 +286,7 @@ def cleanup_expired_licenses():
                         "reserved_by": None,  # Clear reservation
                         "reserved_by_name": None,  # Clear reservation
                         "reserved_at": None,  # Clear reservation
-                        "last_activity": current_time.isoformat()
+                        "last_activity": current_time.isoformat() + "Z"
                     }
                     
                     licenses_collection().update_one(

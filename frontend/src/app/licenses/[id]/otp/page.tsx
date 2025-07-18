@@ -47,7 +47,7 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const [licenseData, setLicenseData] = useState<LicenseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(120 * 60); // 2 hours in seconds
+  const [timeLeft, setTimeLeft] = useState(0); // Start with 0, will be updated when data loads
   const [copied, setCopied] = useState(false);
   const [isExtending, setIsExtending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,6 +94,13 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
           } else {
             const activateData = await activateRes.json();
             console.log('License activation successful:', activateData);
+            // Check if activation response contains expires_at
+            if (activateData.expires_at) {
+              const expiresAt = new Date(activateData.expires_at);
+              const now = new Date();
+              const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
+              setTimeLeft(timeLeftSeconds);
+            }
           }
         } catch (activateError: any) {
           console.error('License activation failed:', activateError.message);
@@ -131,16 +138,21 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
         if (licenseJson.expires_at) {
           const expiresAt = new Date(licenseJson.expires_at);
           const now = new Date();
+          
+          // Check if the dates are valid
+          if (isNaN(expiresAt.getTime()) || isNaN(now.getTime())) {
+            console.error('Invalid date format:', { expires_at: licenseJson.expires_at });
+            setTimeLeft(0);
+            return;
+          }
+          
           const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
-          console.log('Time calculation:', {
-            expiresAt: expiresAt.toISOString(),
-            now: now.toISOString(),
-            timeLeftSeconds
-          });
           setTimeLeft(timeLeftSeconds);
         } else {
-          console.warn('No expires_at found in license data');
-          setTimeLeft(0);
+          console.warn('No expires_at found in license data, setting default time');
+          // If no expires_at, try to calculate from current time + 2 hours
+          const defaultTimeLeft = 120 * 60; // 2 hours in seconds
+          setTimeLeft(defaultTimeLeft);
         }
         
       } catch (err: any) {
@@ -153,8 +165,12 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
 
     fetchData();
 
+    // Start the countdown timer - only count down if timeLeft > 0
     const intervalId = setInterval(() => {
-      setTimeLeft(prev => Math.max(0, prev - 1));
+      setTimeLeft(prev => {
+        if (prev <= 0) return 0; // Don't count down if already at 0
+        return Math.max(0, prev - 1);
+      });
     }, 1000);
 
     return () => clearInterval(intervalId);
