@@ -41,8 +41,16 @@ def get_my_info(current_user: dict = Depends(get_current_user)):
     if not phone_number:
         raise HTTPException(status_code=400, detail="Invalid token data")
 
-    user = get_user_collection().find_one({"phone_number": phone_number}, {"_id": 0, "password": 0})
+    user = get_user_collection().find_one({"phone_number": phone_number}, {"password": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Convert _id to user_id and make it a string
+    user["user_id"] = str(user["_id"])
+    del user["_id"]
+    
+    # Add default role if not present
+    if "role" not in user:
+        user["role"] = "user"
 
     return user
