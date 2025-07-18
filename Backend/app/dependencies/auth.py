@@ -20,6 +20,10 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Check if user is active
+    if not user.get("is_active", True):
+        raise HTTPException(status_code=401, detail="Account is deactivated")
+    
     # Convert _id to user_id and make it a string
     user["user_id"] = str(user["_id"])
     del user["_id"]
@@ -29,3 +33,22 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         user["role"] = "user"
     
     return user
+
+def require_admin(current_user: dict = Depends(get_current_user)):
+    """Dependency to require admin role"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Admin access required"
+        )
+    return current_user
+
+def require_user_or_admin(current_user: dict = Depends(get_current_user)):
+    """Dependency to require user or admin role"""
+    role = current_user.get("role")
+    if role not in ["user", "admin"]:
+        raise HTTPException(
+            status_code=403, 
+            detail="Access denied"
+        )
+    return current_user

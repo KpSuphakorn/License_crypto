@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, Path, Depends
+from fastapi import APIRouter, HTTPException, Path, Depends, Request
 from app.schemas.licenses_schema import licenses, Updatelicenses
 from app.models.licenses_model import licenses_collection
 from app.dependencies.auth import get_current_user
+from app.routes.usage_log_routes import log_usage
 from bson import ObjectId
 from datetime import datetime, timedelta
 
@@ -75,7 +76,7 @@ def get_licenses_by_id(licenses_id: str = Path(...), user: dict = Depends(get_cu
     return licenses
 
 @router.post("/{licenses_id}/request")
-def request_license(licenses_id: str = Path(...), user: dict = Depends(get_current_user)):
+def request_license(licenses_id: str = Path(...), user: dict = Depends(get_current_user), request: Request = None):
     if not ObjectId.is_valid(licenses_id):
         raise HTTPException(status_code=400, detail="Invalid licenses ID")
 
@@ -95,6 +96,25 @@ def request_license(licenses_id: str = Path(...), user: dict = Depends(get_curre
         else:
             # If it's the same user, allow re-request
             pass
+    
+    user_id = user.get("user_id")
+    user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+    
+    # Log the license request
+    try:
+        ip_address = request.client.host if request else None
+        user_agent = request.headers.get("user-agent") if request else None
+        log_usage(
+            user_id=user_id,
+            user_name=user_name,
+            license_id=licenses_id,
+            license_no=licenses.get("No", ""),
+            action="request_license",
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+    except Exception as e:
+        print(f"Failed to log usage: {e}")
     
     # Reserve the license for this user but don't mark as "in use" yet
     # The license will be marked as "in use" when they request OTP
@@ -123,7 +143,7 @@ def request_license(licenses_id: str = Path(...), user: dict = Depends(get_curre
     return {"message": "License reserved successfully. Request OTP to activate."}
 
 @router.post("/{licenses_id}/activate")
-def activate_license(licenses_id: str = Path(...), user: dict = Depends(get_current_user)):
+def activate_license(licenses_id: str = Path(...), user: dict = Depends(get_current_user), request: Request = None):
     """Activate a reserved license when user requests OTP"""
     print(f"Activating license {licenses_id} for user {user.get('user_id')}")
     
@@ -139,6 +159,7 @@ def activate_license(licenses_id: str = Path(...), user: dict = Depends(get_curr
     
     # Check if user has reserved this license
     user_id = user.get("user_id")
+    user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
     reserved_by = licenses.get("reserved_by")
     
     print(f"User ID: {user_id}, Reserved by: {reserved_by}")
@@ -178,6 +199,22 @@ def activate_license(licenses_id: str = Path(...), user: dict = Depends(get_curr
     
     print(f"Setting expiration time to: {expires_at.isoformat()}Z")
     
+    # Log the license activation
+    try:
+        ip_address = request.client.host if request else None
+        user_agent = request.headers.get("user-agent") if request else None
+        log_usage(
+            user_id=user_id,
+            user_name=user_name,
+            license_id=licenses_id,
+            license_no=licenses.get("No", ""),
+            action="activate_license",
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+    except Exception as e:
+        print(f"Failed to log usage: {e}")
+    
     # Activate the license
     update_data = {
         "is_available": False,
@@ -208,7 +245,7 @@ def activate_license(licenses_id: str = Path(...), user: dict = Depends(get_curr
     return {"message": "License activated successfully", "expires_at": expires_at.isoformat() + "Z"}
 
 @router.post("/{licenses_id}/release")
-def release_license(licenses_id: str = Path(...), user: dict = Depends(get_current_user)):
+def release_license(licenses_id: str = Path(...), user: dict = Depends(get_current_user), request: Request = None):
     if not ObjectId.is_valid(licenses_id):
         raise HTTPException(status_code=400, detail="Invalid licenses ID")
 
@@ -219,11 +256,41 @@ def release_license(licenses_id: str = Path(...), user: dict = Depends(get_curre
     
     # Check if user has permission to release this license
     user_id = user.get("user_id")
+    user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
     is_admin = user.get("role") == "admin"
     is_current_user = licenses.get("current_user") == user_id
     
     if not is_admin and not is_current_user:
         raise HTTPException(status_code=403, detail="You don't have permission to release this license")
+    
+    # Calculate duration if license was active
+    duration_seconds = None
+    if licenses.get("assigned_at"):
+        try:
+            assigned_at_str = licenses.get("assigned_at", "").replace('Z', '+00:00')
+            assigned_at = datetime.fromisoformat(assigned_at_str)
+            if assigned_at.tzinfo is not None:
+                assigned_at = assigned_at.replace(tzinfo=None)
+            duration_seconds = int((datetime.utcnow() - assigned_at).total_seconds())
+        except Exception as e:
+            print(f"Error calculating duration: {e}")
+    
+    # Log the license release
+    try:
+        ip_address = request.client.host if request else None
+        user_agent = request.headers.get("user-agent") if request else None
+        log_usage(
+            user_id=user_id,
+            user_name=user_name,
+            license_id=licenses_id,
+            license_no=licenses.get("No", ""),
+            action="release_license",
+            duration_seconds=duration_seconds,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+    except Exception as e:
+        print(f"Failed to log usage: {e}")
     
     # Update the license to mark it as available and clear all reservations
     update_data = {
@@ -276,6 +343,34 @@ def cleanup_expired_licenses():
                 
                 # Only clean up if truly expired
                 if current_time > expires_at:
+                    # Log the automatic cleanup
+                    try:
+                        current_user_name = license.get("current_user_name", "")
+                        assigned_at_str = license.get("assigned_at", "")
+                        duration_seconds = None
+                        
+                        if assigned_at_str:
+                            try:
+                                assigned_at = datetime.fromisoformat(assigned_at_str.replace('Z', '+00:00'))
+                                if assigned_at.tzinfo is not None:
+                                    assigned_at = assigned_at.replace(tzinfo=None)
+                                duration_seconds = int((current_time - assigned_at).total_seconds())
+                            except Exception as e:
+                                print(f"Error calculating duration for cleanup: {e}")
+                        
+                        log_usage(
+                            user_id=license.get("current_user", "system"),
+                            user_name=current_user_name or "System Cleanup",
+                            license_id=str(license["_id"]),
+                            license_no=license.get("No", ""),
+                            action="license_expired",
+                            duration_seconds=duration_seconds,
+                            ip_address=None,
+                            user_agent="System Cleanup"
+                        )
+                    except Exception as e:
+                        print(f"Failed to log cleanup: {e}")
+                    
                     # Update the license to mark it as available and clear reservations
                     update_data = {
                         "is_available": True,

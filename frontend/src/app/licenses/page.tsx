@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { User, LogOut, Search, Filter, Grid, List, RefreshCw, Eye, Lock, Users, Clock, CheckCircle, AlertCircle, Calendar, Timer, Bell, UserCheck, UserX, Activity } from 'lucide-react';
+import { User, LogOut, Search, Filter, Grid, List, RefreshCw, Eye, Lock, Users, Clock, CheckCircle, AlertCircle, Calendar, Timer, Bell, UserCheck, UserX, Activity, Download } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 
@@ -249,6 +249,39 @@ export default function LicenseManagementDashboard() {
     window.location.href = '/login';
   };
 
+  const handleDownloadLogs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/usage-logs/download`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to download logs');
+      }
+      
+      // Get the blob and create a download link
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `usage-logs-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+    } catch (error: any) {
+      console.error('Error downloading logs:', error);
+      alert(error.message || 'An error occurred while downloading logs. Please try again.');
+    }
+  };
+
   const filteredLicenses = licenses.filter(license => {
     const matchesSearch = license.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          license.No.includes(searchTerm) ||
@@ -379,6 +412,17 @@ export default function LicenseManagementDashboard() {
           </div>
           
           <div className="flex items-center space-x-4">
+            {/* Admin Download Logs Button */}
+            {userInfo?.role === 'admin' && (
+              <button
+                onClick={handleDownloadLogs}
+                className="flex items-center space-x-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                <Download className="w-5 h-5" />
+                <span>Download Logs</span>
+              </button>
+            )}
+            
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
