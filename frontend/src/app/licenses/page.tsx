@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { User, LogOut, Search, Filter, Grid, List, RefreshCw, Eye, Lock, Users, Clock, CheckCircle, AlertCircle, Calendar, Timer, Bell, UserCheck, UserX, Activity, Download } from 'lucide-react';
+import { User, LogOut, Search, Filter, Grid, List, RefreshCw, Eye, Lock, Users, Clock, CheckCircle, AlertCircle, Calendar, Timer, Bell, UserCheck, UserX, Activity, Download, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import DatePicker from 'react-datepicker';
 
 interface License {
   _id: string;
@@ -54,6 +55,15 @@ export default function LicenseManagementDashboard() {
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [requestingLicense, setRequestingLicense] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('connected');
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadFilters, setDownloadFilters] = useState({
+    start_date: null as Date | null,
+    end_date: null as Date | null,
+    user_id: '',
+    license_id: '',
+    action: ''
+  });
+
   const router = useRouter();
 
   // Fetch licenses function
@@ -154,6 +164,10 @@ export default function LicenseManagementDashboard() {
     setIsRefreshing(false);
   };
 
+  const handleDateChange = (name: 'start_date' | 'end_date', date: Date | null) => {
+    setDownloadFilters(prev => ({ ...prev, [name]: date }));
+  };
+
   const handleRequestLicense = async (license: License) => {
     if (requestingLicense) return; // Prevent multiple requests
     
@@ -250,35 +264,37 @@ export default function LicenseManagementDashboard() {
   };
 
   const handleDownloadLogs = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/usage-logs/download`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to download logs');
-      }
-      
-      // Get the blob and create a download link
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `usage-logs-${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-    } catch (error: any) {
-      console.error('Error downloading logs:', error);
-      alert(error.message || 'An error occurred while downloading logs. Please try again.');
+    const queryParams = new URLSearchParams();
+    if (downloadFilters.start_date) queryParams.append('start_date', downloadFilters.start_date.toISOString());
+    if (downloadFilters.end_date) queryParams.append('end_date', downloadFilters.end_date.toISOString());
+    if (downloadFilters.user_id) queryParams.append('user_id', downloadFilters.user_id);
+    if (downloadFilters.license_id) queryParams.append('license_id', downloadFilters.license_id);
+    if (downloadFilters.action) queryParams.append('action', downloadFilters.action);
+
+    const response = await fetch(`/api/logs/download?${queryParams.toString()}`, {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      console.error('Failed to download logs');
+      return;
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'logs.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    if (name === 'start_date' || name === 'end_date') {
+      setDownloadFilters(prev => ({ ...prev, [name]: value ? new Date(value).toISOString() : '' }));
+    } else {
+      setDownloadFilters(prev => ({ ...prev, [name]: value }));
     }
   };
 
@@ -318,11 +334,11 @@ export default function LicenseManagementDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center space-y-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <div className="text-center space-y-4 pt-32">
           <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
           <div className="space-y-2">
-            <div className="h-4 bg-gray-200 rounded-full w-64 animate-pulse"></div>
+            <div className="h-4 bg-gray-200 rounded-full w-64 animate-pulse mx-auto"></div>
             <div className="h-4 bg-gray-200 rounded-full w-48 animate-pulse mx-auto"></div>
           </div>
           <p className="text-gray-600 font-medium">Loading License Management System...</p>
@@ -415,7 +431,7 @@ export default function LicenseManagementDashboard() {
             {/* Admin Download Logs Button */}
             {userInfo?.role === 'admin' && (
               <button
-                onClick={handleDownloadLogs}
+                onClick={() => setShowDownloadModal(true)}
                 className="flex items-center space-x-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
               >
                 <Download className="w-5 h-5" />
@@ -454,6 +470,98 @@ export default function LicenseManagementDashboard() {
             </div>
           </div>
         </div>
+
+        {showDownloadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-lg space-y-4">
+            <h3 className="text-lg font-semibold text-gray-800">Filter Logs to Download</h3>
+
+            {/* Start Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <DatePicker
+                selected={downloadFilters.start_date}
+                onChange={(date) => handleDateChange('start_date', date)}
+                showTimeSelect
+                dateFormat="Pp"
+                placeholderText="Select start date and time"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* End Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+              <DatePicker
+                selected={downloadFilters.end_date}
+                onChange={(date) => handleDateChange('end_date', date)}
+                showTimeSelect
+                dateFormat="Pp"
+                placeholderText="Select end date and time"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* User ID */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">User ID</label>
+              <input
+                type="text"
+                value={downloadFilters.user_id}
+                onChange={(e) =>
+                  setDownloadFilters({ ...downloadFilters, user_id: e.target.value })
+                }
+                placeholder="User ID"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* License ID */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">License ID</label>
+              <input
+                type="text"
+                value={downloadFilters.license_id}
+                onChange={(e) =>
+                  setDownloadFilters({ ...downloadFilters, license_id: e.target.value })
+                }
+                placeholder="License ID"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Action */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
+              <input
+                type="text"
+                value={downloadFilters.action}
+                onChange={(e) =>
+                  setDownloadFilters({ ...downloadFilters, action: e.target.value })
+                }
+                placeholder="Action"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="flex justify-end space-x-2 pt-4">
+              <button
+                onClick={() => setShowDownloadModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDownloadLogs}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* Licenses Grid/List */}
         <div className={viewMode === 'grid' 
@@ -600,7 +708,8 @@ export default function LicenseManagementDashboard() {
                           <span className="text-gray-500">User: </span>
                           <span className="font-medium text-gray-900">{license.current_user_name || license.current_user}</span>
                         </div>
-                      )}                      {license.expires_at && (
+                      )}
+                      {license.expires_at && (
                         <div className="text-sm text-orange-600">
                           {formatTimeRemaining(license.expires_at)}
                         </div>
