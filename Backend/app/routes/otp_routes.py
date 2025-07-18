@@ -1,36 +1,48 @@
 from fastapi import APIRouter, HTTPException, Query
+from dotenv import load_dotenv
+import os
 import imaplib
 import email
 import re
 import smtplib
-import os
 from email.mime.text import MIMEText
 from email.header import Header
 from email.utils import parsedate_to_datetime, parseaddr
 from zoneinfo import ZoneInfo
-from dotenv import load_dotenv
 
 load_dotenv()
+print("LICENSE2_EMAIL:", os.getenv("LICENSE2_EMAIL"))
+print("LICENSE2_PASSWORD:", os.getenv("LICENSE2_PASSWORD"))
 
-POLICE_EMAIL = os.getenv("POLICE_EMAIL")
-POLICE_PASSWORD = os.getenv("POLICE_PASSWORD")
-LICENSE_EMAIL = os.getenv("LICENSE_EMAIL")
-LICENSE_PASSWORD = os.getenv("LICENSE_PASSWORD")
+LICENSE_ACCOUNTS = {
+    f"license{i}": {
+        "email": os.getenv(f"LICENSE{i}_EMAIL"),
+        "password": os.getenv(f"LICENSE{i}_PASSWORD")
+    } for i in range(1, 13)
+}
+print("LICENSE_ACCOUNTS:", LICENSE_ACCOUNTS)
+
 IMAP_SERVER = os.getenv("IMAP_SERVER")
 SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT"))
 
 router = APIRouter(prefix="/otp", tags=["OTP"])
 
-
 @router.get("/get")
 def get_otp(
     subject_keyword: str = Query("OTP", description="Keyword in subject"),
-    from_email: str = Query(..., description="Original sender email"),
+    license_id: str = Query(..., description="License ID (e.g., license1, license2)"),
 ):
+    license_id = license_id.strip()  # ลบ whitespace หรือ newline
+    print(f"Received license_id: {license_id}")
+    if license_id not in LICENSE_ACCOUNTS or not LICENSE_ACCOUNTS[license_id]["email"]:
+        print(f"Invalid license_id: {license_id}")
+        raise HTTPException(status_code=400, detail="Invalid license ID")
+    
+    license = LICENSE_ACCOUNTS[license_id]
     try:
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
-        mail.login(POLICE_EMAIL, POLICE_PASSWORD)
+        mail.login(license["email"], license["password"])
         mail.select("inbox")
 
         result, data = mail.search(None, f'(TEXT "{subject_keyword}")')
@@ -47,7 +59,7 @@ def get_otp(
             message = email.message_from_bytes(raw_email)
 
             from_addr = parseaddr(message["From"])[1]
-            if from_addr.strip().lower() != from_email.strip().lower():
+            if from_addr.strip().lower() != license["email"].strip().lower():
                 continue
 
             msg_body = ""
@@ -73,21 +85,28 @@ def get_otp(
                 "from": message["From"],
                 "to": message.get("To", ""),
                 "subject": message["Subject"],
-                "date": formatted_date
+                "date": formatted_date,
+                "license_id": license_id
             }
 
         return {"message": "No matching OTP email found from specified sender"}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=f"Failed to fetch OTP: {str(e)}")
 
 @router.post("/mock-send")
 def mock_send_otp_email(
     otp: str = Query(..., description="OTP to send"),
-    to_email: str = Query(..., description="Email address to send OTP to")
+    license_id: str = Query(..., description="License ID (e.g., license1, license2)"),
 ):
     try:
+        if license_id not in LICENSE_ACCOUNTS:
+            raise HTTPException(status_code=400, detail="Invalid license ID")
+
+        license = LICENSE_ACCOUNTS[license_id]
+        if not license["email"] or not license["password"]:
+            raise HTTPException(status_code=400, detail="License email or password not configured")
+
         subject = "รหัส OTP สำหรับการเข้าใช้งานระบบ"
         html_body = f"""
         <html>
@@ -98,25 +117,21 @@ def mock_send_otp_email(
                 <div style="font-size: 36px; font-weight: bold; letter-spacing: 10px; margin: 20px 0;">{otp}</div>
                 <p style="color: #999;">รหัสจะหมดอายุในเร็ว ๆ นี้</p>
             </div>
-            <p style="margin-top: 40px; font-size: 12px; color: #999;">
-                เข้าไปที่ <a href="#" style="color: red;">การจัดการบัญชี</a> เพื่อยกเลิกวิธีการยืนยันตัวตนที่คุณไม่ต้องการ
-            </p>
         </body>
         </html>
         """
 
         msg = MIMEText(html_body, "html", "utf-8")
         msg["Subject"] = Header(subject, "utf-8")
-        msg["From"] = f"License <{LICENSE_EMAIL}>"
-        msg["To"] = to_email
+        msg["From"] = f"License <{license['email']}>"
+        msg["To"] = license["email"]
 
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
-        server.login(LICENSE_EMAIL, LICENSE_PASSWORD)
-        server.sendmail(LICENSE_EMAIL, [to_email], msg.as_string())
+        server.login(license["email"], license["password"])
+        server.sendmail(license["email"], [license["email"]], msg.as_string())
         server.quit()
 
-        return {"message": f"Mock OTP email sent to {to_email}"}
-
+        return {"message": f"Mock OTP email sent to {license['email']} from {license['email']}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
