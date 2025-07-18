@@ -4,6 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { User, LogOut, Search, Filter, Grid, List, RefreshCw, Eye, Lock, Users, Clock, CheckCircle, AlertCircle, Calendar, Timer, Bell, UserCheck, UserX, Activity, Download, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { format } from 'date-fns';
+import CustomDatePicker from '@/components/DatePicker/DatePicker';
 
 interface License {
   _id: string;
@@ -56,15 +60,15 @@ export default function LicenseManagementDashboard() {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('connected');
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadFilters, setDownloadFilters] = useState({
-    start_date: '',
-    end_date: '',
+    start_date: '' as string,
+    end_date: '' as string,
     user_id: '',
     license_id: '',
     action: ''
   });
+
   const router = useRouter();
 
-  // Fetch licenses function
   const fetchLicenses = async (isAutoRefresh = false) => {
     try {
       if (isAutoRefresh) {
@@ -72,7 +76,6 @@ export default function LicenseManagementDashboard() {
         setConnectionStatus('checking');
       }
       
-      // Only cleanup expired licenses on initial load, not during auto-refresh
       if (!isAutoRefresh) {
         try {
           await fetch(`${API_BASE_URL}/licenses/cleanup-expired`, {
@@ -101,12 +104,10 @@ export default function LicenseManagementDashboard() {
     }
   };
 
-  // Fetch user info and initial licenses
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch user info
         const token = localStorage.getItem('token');
         if (!token) throw new Error('No token found');
         const userRes = await fetch(`${API_BASE_URL}/auth`, {
@@ -116,7 +117,6 @@ export default function LicenseManagementDashboard() {
         const userData = await userRes.json();
         setUserInfo(userData);
 
-        // Fetch licenses
         await fetchLicenses();
       } catch (err: any) {
         setError(err.message);
@@ -127,61 +127,45 @@ export default function LicenseManagementDashboard() {
     fetchData();
   }, []);
 
-  // Auto-refresh licenses every 5 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (isPageVisible) {
         fetchLicenses(true);
       }
-    }, 5000); // Refresh every 5 seconds
-
+    }, 5000);
     return () => clearInterval(interval);
   }, [isPageVisible]);
 
-  // Handle page visibility to pause auto-refresh when user switches tabs
   useEffect(() => {
     const handleVisibilityChange = () => {
       setIsPageVisible(!document.hidden);
-      // Refresh immediately when page becomes visible
       if (!document.hidden) {
         fetchLicenses(true);
       }
     };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await fetchLicenses();
-    await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UX
+    await new Promise(resolve => setTimeout(resolve, 500));
     setIsRefreshing(false);
   };
 
   const handleRequestLicense = async (license: License) => {
-    if (requestingLicense) return; // Prevent multiple requests
-    
+    if (requestingLicense) return;
     setRequestingLicense(license._id);
-    
     try {
-      // First, refresh licenses to check current state
       await fetchLicenses();
-      
-      // Double-check if license is still available after refresh
       const currentLicenses = await fetch(`${API_BASE_URL}/licenses`).then(res => res.json());
       const currentLicense = currentLicenses.licensess?.find((l: License) => l._id === license._id);
-      
       if (currentLicense && !currentLicense.is_available) {
         alert('This license is no longer available. It may have been taken by another user. Please select another one.');
         setLicenses(currentLicenses.licensess || []);
         return;
       }
-      
-      // Make the request to reserve/assign the license
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/licenses/${license._id}/request`, {
         method: 'POST',
@@ -190,29 +174,18 @@ export default function LicenseManagementDashboard() {
           'Content-Type': 'application/json'
         }
       });
-      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (response.status === 409) {
           alert('This license was just taken by another user. Please select another one.');
-          await fetchLicenses(); // Refresh the list
+          await fetchLicenses();
           return;
-        } else {
-          throw new Error(errorData.detail || 'Failed to request license');
         }
+        throw new Error(errorData.detail || 'Failed to request license');
       }
-      
-      const result = await response.json();
-      console.log('License request result:', result);
-      
-      // Refresh the licenses list to show the updated state
       await fetchLicenses();
-      
-      // Navigate to the license details page with a query parameter to indicate this is from a request
       router.push(`/licenses/${license._id}?fromRequest=true`);
-      
     } catch (error: any) {
-      console.error('Error requesting license:', error);
       alert(error.message || 'An error occurred while requesting the license. Please try again.');
     } finally {
       setRequestingLicense(null);
@@ -220,10 +193,8 @@ export default function LicenseManagementDashboard() {
   };
 
   const handleReleaseLicense = async (license: License) => {
-    if (requestingLicense) return; // Prevent multiple actions
-    
+    if (requestingLicense) return;
     setRequestingLicense(license._id);
-    
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/licenses/${license._id}/release`, {
@@ -233,19 +204,13 @@ export default function LicenseManagementDashboard() {
           'Content-Type': 'application/json'
         }
       });
-      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || 'Failed to release license');
       }
-      
-      // Refresh the licenses list to show the updated state
       await fetchLicenses();
-      
       alert('License released successfully!');
-      
     } catch (error: any) {
-      console.error('Error releasing license:', error);
       alert(error.message || 'An error occurred while releasing the license. Please try again.');
     } finally {
       setRequestingLicense(null);
@@ -259,8 +224,15 @@ export default function LicenseManagementDashboard() {
 
   const handleDownloadLogs = async () => {
     try {
+      if (downloadFilters.start_date && downloadFilters.end_date) {
+        const startDate = new Date(downloadFilters.start_date);
+        const endDate = new Date(downloadFilters.end_date);
+        if (startDate > endDate) {
+          alert('Start date cannot be after end date');
+          return;
+        }
+      }
       const token = localStorage.getItem('token');
-      // Build query string from filters
       const queryParams = new URLSearchParams();
       if (downloadFilters.start_date) queryParams.append('start_date', downloadFilters.start_date);
       if (downloadFilters.end_date) queryParams.append('end_date', downloadFilters.end_date);
@@ -281,7 +253,6 @@ export default function LicenseManagementDashboard() {
         throw new Error(errorData.detail || 'Failed to download logs');
       }
       
-      // Get the blob and create a download link
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -292,8 +263,8 @@ export default function LicenseManagementDashboard() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       
-      setShowDownloadModal(false); // Close modal after successful download
-      setDownloadFilters({ start_date: '', end_date: '', user_id: '', license_id: '', action: '' }); // Reset filters
+      setShowDownloadModal(false);
+      setDownloadFilters({ start_date: '', end_date: '', user_id: '', license_id: '', action: '' });
     } catch (error: any) {
       console.error('Error downloading logs:', error);
       alert(error.message || 'An error occurred while downloading logs. Please try again.');
@@ -303,7 +274,7 @@ export default function LicenseManagementDashboard() {
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === 'start_date' || name === 'end_date') {
-      setDownloadFilters(prev => ({ ...prev, [name]: value ? new Date(value).toISOString() : '' }));
+      setDownloadFilters(prev => ({ ...prev, [name]: value ? new Date(value).toISOString().split('T')[0] : '' }));
     } else {
       setDownloadFilters(prev => ({ ...prev, [name]: value }));
     }
@@ -314,7 +285,6 @@ export default function LicenseManagementDashboard() {
                          license.No.includes(searchTerm) ||
                          (license.current_user && license.current_user.toLowerCase().includes(searchTerm.toLowerCase())) ||
                          (license.current_user_name && license.current_user_name.toLowerCase().includes(searchTerm.toLowerCase()));
-    
     const matchesFilter = filterStatus === 'all' ||
                          (filterStatus === 'available' && license.is_available) ||
                          (filterStatus === 'in-use' && !license.is_available) ||
@@ -333,7 +303,6 @@ export default function LicenseManagementDashboard() {
     const diffMs = expires.getTime() - now.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    
     if (diffHours > 0) {
       return `${diffHours}h ${diffMinutes}m remaining`;
     } else if (diffMinutes > 0) {
@@ -368,9 +337,7 @@ export default function LicenseManagementDashboard() {
         isAutoRefreshing={isAutoRefreshing}
       />
       <div className="container mx-auto px-6 py-8">
-        {/* Enhanced Stats Cards */}
         <div className="flex flex-col md:flex-row justify-center gap-6 mb-8">
-          {/* Auto-refresh and connection status indicators */}
           <div className="fixed top-20 right-4 flex flex-col space-y-2 z-50">
             {isAutoRefreshing && (
               <div className="bg-blue-500 text-white px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2">
@@ -378,7 +345,6 @@ export default function LicenseManagementDashboard() {
                 <span className="text-sm">Syncing...</span>
               </div>
             )}
-            
             {connectionStatus === 'disconnected' && (
               <div className="bg-red-500 text-white px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4" />
@@ -386,7 +352,6 @@ export default function LicenseManagementDashboard() {
               </div>
             )}
           </div>
-          
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-white/30 hover:bg-white/90 transition-all duration-300 hover:scale-105 shadow-sm w-full md:w-1/3 max-w-xs">
             <div className="flex items-center justify-between">
               <div>
@@ -425,7 +390,6 @@ export default function LicenseManagementDashboard() {
           </div>
         </div>
 
-        {/* Controls */}
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -437,9 +401,7 @@ export default function LicenseManagementDashboard() {
               className="w-full pl-12 pr-4 py-3 bg-white/80 backdrop-blur-sm rounded-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white/95 transition-all duration-200"
             />
           </div>
-          
           <div className="flex items-center space-x-4">
-            {/* Admin Download Logs Button */}
             {userInfo?.role === 'admin' && (
               <button
                 onClick={() => setShowDownloadModal(true)}
@@ -449,7 +411,6 @@ export default function LicenseManagementDashboard() {
                 <span>Download Logs</span>
               </button>
             )}
-            
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
@@ -458,23 +419,17 @@ export default function LicenseManagementDashboard() {
               <option value="all">All Licenses</option>
               <option value="available">Available</option>
               <option value="in-use">In Use</option>
-              {/* <option value="queued">Has Queue</option> */}
             </select>
-            
             <div className="flex bg-white/80 backdrop-blur-sm rounded-xl border border-white/30 p-1">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-lg transition-all duration-200 ${
-                  viewMode === 'grid' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-600 hover:bg-white/50'
-                }`}
+                className={`p-2 rounded-lg transition-all duration-200 ${viewMode === 'grid' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-600 hover:bg-white/50'}`}
               >
                 <Grid className="w-5 h-5" />
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-all duration-200 ${
-                  viewMode === 'list' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-600 hover:bg-white/50'
-                }`}
+                className={`p-2 rounded-lg transition-all duration-200 ${viewMode === 'list' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-600 hover:bg-white/50'}`}
               >
                 <List className="w-5 h-5" />
               </button>
@@ -482,9 +437,8 @@ export default function LicenseManagementDashboard() {
           </div>
         </div>
 
-        {/* Download Logs Modal */}
         {showDownloadModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-white rounded-2xl p-6 w-full max-w-md">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">Download Usage Logs</h2>
@@ -498,22 +452,29 @@ export default function LicenseManagementDashboard() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                  <input
-                    type="datetime-local"
-                    name="start_date"
-                    value={downloadFilters.start_date ? downloadFilters.start_date.slice(0, 16) : ''}
-                    onChange={handleFilterChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  <CustomDatePicker
+                    selected={downloadFilters.start_date ? new Date(downloadFilters.start_date) : null}
+                    onChange={(date: Date | null) => handleFilterChange({
+                      target: { name: 'start_date', value: date ? format(date, 'yyyy-MM-dd') : '' }
+                    } as any)}
+                    placeholderText="Select start date"
+                    dateFormat="yyyy-MM-dd"
+                    isClearable={true}
+                    className="focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                  <input
-                    type="datetime-local"
-                    name="end_date"
-                    value={downloadFilters.end_date ? downloadFilters.end_date.slice(0, 16) : ''}
-                    onChange={handleFilterChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  <CustomDatePicker
+                    selected={downloadFilters.end_date ? new Date(downloadFilters.end_date) : null}
+                    onChange={(date: Date | null) => handleFilterChange({
+                      target: { name: 'end_date', value: date ? format(date, 'yyyy-MM-dd') : '' }
+                    } as any)}
+                    placeholderText="Select end date"
+                    dateFormat="yyyy-MM-dd"
+                    isClearable={true}
+                    className="focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -573,28 +534,17 @@ export default function LicenseManagementDashboard() {
           </div>
         )}
 
-        {/* Licenses Grid/List */}
-        <div className={viewMode === 'grid' 
-          ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' 
-          : 'space-y-4'
-        }>
+        <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' : 'space-y-4'}>
           {filteredLicenses.map((license, index) => (
             <div
               key={license._id}
-              className={`group relative bg-white/80 backdrop-blur-sm rounded-2xl border border-white/30 transition-all duration-300 ${
-                viewMode === 'list' ? 'flex items-center' : ''
-              } ${!license.is_available ? 'opacity-60 pointer-events-none' : 'hover:bg-white/95 hover:scale-[1.02] hover:shadow-lg'}`}
+              className={`group relative bg-white/80 backdrop-blur-sm rounded-2xl border border-white/30 transition-all duration-300 ${viewMode === 'list' ? 'flex items-center' : ''} ${!license.is_available ? 'opacity-60 pointer-events-none' : 'hover:bg-white/95 hover:scale-[1.02] hover:shadow-lg'}`}
               style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className={`p-6 ${viewMode === 'list' ? 'flex-1' : ''}`}>
-                {/* License Header */}
                 <div className={`flex items-center justify-between mb-4 ${viewMode === 'list' ? 'mb-0' : ''}`}>
                   <div className="flex items-center space-x-3">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white shadow-lg ${
-                      license.is_available 
-                        ? 'bg-gradient-to-r from-green-500 to-green-600' 
-                        : 'bg-gradient-to-r from-orange-500 to-orange-600'
-                    }`}>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white shadow-lg ${license.is_available ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-orange-500 to-orange-600'}`}>
                       {license.No}
                     </div>
                     <div>
@@ -602,9 +552,7 @@ export default function LicenseManagementDashboard() {
                       <p className="text-sm text-gray-600">{license.gmail}</p>
                     </div>
                   </div>
-                  
                   <div className="flex items-center space-x-2">
-                    {/* Show status based on license state */}
                     {license.is_available ? (
                       license.reserved_by ? (
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
@@ -622,11 +570,8 @@ export default function LicenseManagementDashboard() {
                     )}
                   </div>
                 </div>
-
-                {/* License Details */}
                 {viewMode === 'grid' && (
                   <div className="space-y-3">
-                    {/* Show reservation info if license is reserved */}
                     {license.is_available && license.reserved_by && (
                       <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200">
                         <div className="flex items-center justify-between">
@@ -644,8 +589,6 @@ export default function LicenseManagementDashboard() {
                         )}
                       </div>
                     )}
-
-                    {/* Show current user info if license is in use */}
                     {!license.is_available && license.current_user && (
                       <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
                         <div className="flex items-center justify-between">
@@ -663,19 +606,15 @@ export default function LicenseManagementDashboard() {
                         )}
                       </div>
                     )}
-
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                       <div className="text-xs text-gray-500">
                         Last activity: {new Date(license.last_activity || '').toLocaleTimeString()}
                       </div>
-                      
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleRequestLicense(license)}
                           disabled={(!license.is_available || !!license.reserved_by) || requestingLicense === license._id}
-                          className={`px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm rounded-lg transition-all duration-200 shadow-sm hover:from-green-600 hover:to-green-700 hover:shadow-md flex items-center space-x-2 ${
-                            (!license.is_available || !!license.reserved_by) || requestingLicense === license._id ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
-                          }`}
+                          className={`px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm rounded-lg transition-all duration-200 shadow-sm hover:from-green-600 hover:to-green-700 hover:shadow-md flex items-center space-x-2 ${(!license.is_available || !!license.reserved_by) || requestingLicense === license._id ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''}`}
                         >
                           {requestingLicense === license._id ? (
                             <>
@@ -690,9 +629,7 @@ export default function LicenseManagementDashboard() {
                           <button
                             onClick={() => handleReleaseLicense(license)}
                             disabled={requestingLicense === license._id}
-                            className={`px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm flex items-center space-x-2 ${
-                              requestingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''
-                            }`}
+                            className={`px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm flex items-center space-x-2 ${requestingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''}`}
                           >
                             {requestingLicense === license._id ? (
                               <>
@@ -708,8 +645,6 @@ export default function LicenseManagementDashboard() {
                     </div>
                   </div>
                 )}
-
-                {/* List View Details */}
                 {viewMode === 'list' && (
                   <div className="ml-6 flex items-center justify-between flex-1">
                     <div className="flex items-center space-x-6">
@@ -725,14 +660,11 @@ export default function LicenseManagementDashboard() {
                         </div>
                       )}
                     </div>
-                    
                     <div className="flex space-x-2">
                       <button
                         onClick={() => handleRequestLicense(license)}
                         disabled={!license.is_available || requestingLicense === license._id}
-                        className={`px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm rounded-lg transition-all duration-200 shadow-sm hover:from-green-600 hover:to-green-700 hover:shadow-md flex items-center space-x-2 ${
-                          !license.is_available || requestingLicense === license._id ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
-                        }`}
+                        className={`px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm rounded-lg transition-all duration-200 shadow-sm hover:from-green-600 hover:to-green-700 hover:shadow-md flex items-center space-x-2 ${!license.is_available || requestingLicense === license._id ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''}`}
                       >
                         {requestingLicense === license._id ? (
                           <>
@@ -747,9 +679,7 @@ export default function LicenseManagementDashboard() {
                         <button
                           onClick={() => handleReleaseLicense(license)}
                           disabled={requestingLicense === license._id}
-                          className={`px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm flex items-center space-x-2 ${
-                            requestingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''
-                          }`}
+                          className={`px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm flex items-center space-x-2 ${requestingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           {requestingLicense === license._id ? (
                             <>
@@ -765,8 +695,6 @@ export default function LicenseManagementDashboard() {
                   </div>
                 )}
               </div>
-              
-              {/* Hover effect overlay */}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
             </div>
           ))}
