@@ -396,10 +396,15 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
                   <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center mr-3 mt-0.5">
                     <User className="w-3 h-3 text-blue-600" />
                   </div>
-                  <div className="text-sm text-blue-800">
+                    <div className="text-sm text-blue-800">
                     <p className="font-medium mb-1">คำแนะนำการใช้งาน</p>
-                    <p>คุณสามารถคัดลอกข้อมูลการเข้าสู่ระบบได้โดยคลิกที่ไอคอนคัดลอก และสามารถรับ OTP เพื่อความปลอดภัยเพิ่มเติม</p>
-                  </div>
+                    <ol className="list-decimal ml-5 mb-2">
+                      <li>ไปที่ <a href="https://reactor.chainalysis.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">https://reactor.chainalysis.com</a></li>
+                      <li>กรอกอีเมลและรหัสผ่าน จากนั้นคลิกปุ่ม Login</li>
+                      <li>หลังจากเข้าสู่ระบบแล้ว ให้คลิกเพื่อรับ OTP เพื่อความปลอดภัยเพิ่มเติม</li>
+                    </ol>
+                    <p>คุณสามารถคัดลอกข้อมูลการเข้าสู่ระบบได้โดยคลิกที่ไอคอนคัดลอก</p>
+                    </div>
                 </div>
               </div>
             </div>

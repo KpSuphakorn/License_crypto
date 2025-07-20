@@ -647,11 +647,15 @@ export default function LicenseManagementDashboard() {
                           <span className="text-gray-500">User: </span>
                           <span className="font-medium text-gray-900">{license.current_user_name || license.current_user}</span>
                         </div>
-                      )}                      {license.expires_at && (
+                      )}
+                      {license.expires_at && (
                         <div className="text-sm text-orange-600">
                           {formatTimeRemaining(license.expires_at)}
                         </div>
                       )}
+                      <div className="text-xs text-gray-500">
+                        Last activity: {new Date(license.last_activity || '').toLocaleTimeString()}
+                      </div>
                     </div>
                     
                     <div className="flex space-x-2">
