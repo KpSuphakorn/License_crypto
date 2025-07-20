@@ -53,6 +53,8 @@ export default function LicenseManagementDashboard() {
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [requestingLicense, setRequestingLicense] = useState<string | null>(null);
+  const [cancelingLicense, setCancelingLicense] = useState<string | null>(null);
+  const [releasingLicense, setReleasingLicense] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('connected');
   const router = useRouter();
 
@@ -195,7 +197,6 @@ export default function LicenseManagementDashboard() {
       }
       
       const result = await response.json();
-      console.log('License request result:', result);
       
       // Refresh the licenses list to show the updated state
       await fetchLicenses();
@@ -212,9 +213,9 @@ export default function LicenseManagementDashboard() {
   };
 
   const handleReleaseLicense = async (license: License) => {
-    if (requestingLicense) return; // Prevent multiple actions
+    if (releasingLicense) return; // Prevent multiple actions
     
-    setRequestingLicense(license._id);
+    setReleasingLicense(license._id);
     
     try {
       const token = localStorage.getItem('token');
@@ -240,7 +241,40 @@ export default function LicenseManagementDashboard() {
       console.error('Error releasing license:', error);
       alert(error.message || 'An error occurred while releasing the license. Please try again.');
     } finally {
-      setRequestingLicense(null);
+      setReleasingLicense(null);
+    }
+  };
+
+  const handleCancelReservation = async (license: License) => {
+    if (cancelingLicense) return; // Prevent multiple actions
+    
+    setCancelingLicense(license._id);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/licenses/${license._id}/cancel-reservation`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to cancel reservation');
+      }
+      
+      // Refresh the licenses list to show the updated state
+      await fetchLicenses();
+      
+      alert('Reservation cancelled successfully!');
+      
+    } catch (error: any) {
+      console.error('Error cancelling reservation:', error);
+      alert(error.message || 'An error occurred while cancelling the reservation. Please try again.');
+    } finally {
+      setCancelingLicense(null);
     }
   };
 
@@ -343,15 +377,8 @@ export default function LicenseManagementDashboard() {
       <div className="container mx-auto px-6 py-8">
         {/* Enhanced Stats Cards */}
         <div className="flex flex-col md:flex-row justify-center gap-6 mb-8">
-          {/* Auto-refresh and connection status indicators */}
+          {/* Connection status indicator */}
           <div className="fixed top-20 right-4 flex flex-col space-y-2 z-50">
-            {isAutoRefreshing && (
-              <div className="bg-blue-500 text-white px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Syncing...</span>
-              </div>
-            )}
-            
             {connectionStatus === 'disconnected' && (
               <div className="bg-red-500 text-white px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4" />
@@ -552,11 +579,31 @@ export default function LicenseManagementDashboard() {
                       </div>
                       
                       <div className="flex space-x-2">
+                        {/* Show Cancel Reservation button if user has reserved this license OR if admin */}
+                        {license.is_available && license.reserved_by && (license.reserved_by === userInfo?.user_id || userInfo?.role === 'admin') && (
+                          <button
+                            onClick={() => handleCancelReservation(license)}
+                            disabled={cancelingLicense === license._id}
+                            className={`px-3 py-2 bg-gradient-to-r from-gray-500 to-gray-600 text-white text-sm rounded-lg hover:from-gray-600 hover:to-gray-700 transition-all duration-200 shadow-sm flex items-center space-x-2 ${
+                              cancelingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            {cancelingLicense === license._id ? (
+                              <>
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                <span>Cancelling...</span>
+                              </>
+                            ) : (
+                              <span>Cancel</span>
+                            )}
+                          </button>
+                        )}
+                        
                         <button
                           onClick={() => handleRequestLicense(license)}
-                          disabled={(!license.is_available || !!license.reserved_by) || requestingLicense === license._id}
+                          disabled={(!license.is_available || (!!license.reserved_by && license.reserved_by !== userInfo?.user_id)) || requestingLicense === license._id}
                           className={`px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm rounded-lg transition-all duration-200 shadow-sm hover:from-green-600 hover:to-green-700 hover:shadow-md flex items-center space-x-2 ${
-                            (!license.is_available || !!license.reserved_by) || requestingLicense === license._id ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
+                            (!license.is_available || (!!license.reserved_by && license.reserved_by !== userInfo?.user_id)) || requestingLicense === license._id ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
                           }`}
                         >
                           {requestingLicense === license._id ? (
@@ -571,12 +618,12 @@ export default function LicenseManagementDashboard() {
                         {userInfo?.role === 'admin' && !license.is_available && (
                           <button
                             onClick={() => handleReleaseLicense(license)}
-                            disabled={requestingLicense === license._id}
+                            disabled={releasingLicense === license._id}
                             className={`px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm flex items-center space-x-2 ${
-                              requestingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''
+                              releasingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''
                             }`}
                           >
-                            {requestingLicense === license._id ? (
+                            {releasingLicense === license._id ? (
                               <>
                                 <RefreshCw className="w-4 h-4 animate-spin" />
                                 <span>Releasing...</span>
@@ -608,11 +655,31 @@ export default function LicenseManagementDashboard() {
                     </div>
                     
                     <div className="flex space-x-2">
+                      {/* Show Cancel Reservation button if user has reserved this license OR if admin */}
+                      {license.is_available && license.reserved_by && (license.reserved_by === userInfo?.user_id || userInfo?.role === 'admin') && (
+                        <button
+                          onClick={() => handleCancelReservation(license)}
+                          disabled={cancelingLicense === license._id}
+                          className={`px-3 py-2 bg-gradient-to-r from-gray-500 to-gray-600 text-white text-sm rounded-lg hover:from-gray-600 hover:to-gray-700 transition-all duration-200 shadow-sm flex items-center space-x-2 ${
+                            cancelingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          {cancelingLicense === license._id ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Cancelling...</span>
+                            </>
+                          ) : (
+                            <span>Cancel</span>
+                          )}
+                        </button>
+                      )}
+                      
                       <button
                         onClick={() => handleRequestLicense(license)}
-                        disabled={!license.is_available || requestingLicense === license._id}
+                        disabled={(!license.is_available || (!!license.reserved_by && license.reserved_by !== userInfo?.user_id)) || requestingLicense === license._id}
                         className={`px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm rounded-lg transition-all duration-200 shadow-sm hover:from-green-600 hover:to-green-700 hover:shadow-md flex items-center space-x-2 ${
-                          !license.is_available || requestingLicense === license._id ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
+                          (!license.is_available || (!!license.reserved_by && license.reserved_by !== userInfo?.user_id)) || requestingLicense === license._id ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
                         }`}
                       >
                         {requestingLicense === license._id ? (
@@ -627,12 +694,12 @@ export default function LicenseManagementDashboard() {
                       {userInfo?.role === 'admin' && !license.is_available && (
                         <button
                           onClick={() => handleReleaseLicense(license)}
-                          disabled={requestingLicense === license._id}
+                          disabled={releasingLicense === license._id}
                           className={`px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm flex items-center space-x-2 ${
-                            requestingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''
+                            releasingLicense === license._id ? 'opacity-60 cursor-not-allowed' : ''
                           }`}
                         >
-                          {requestingLicense === license._id ? (
+                          {releasingLicense === license._id ? (
                             <>
                               <RefreshCw className="w-4 h-4 animate-spin" />
                               <span>Releasing...</span>

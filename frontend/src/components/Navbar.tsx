@@ -29,14 +29,6 @@ const Navbar: React.FC<NavbarProps> = ({ userInfo, onRefresh, isRefreshing, onLo
           </div>
         </div>
         <div className="flex items-center space-x-4">
-          {/* Auto-sync indicator */}
-          {isAutoRefreshing && (
-            <div className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs">
-              <RefreshCw className="w-3 h-3 animate-spin" />
-              <span>Auto-sync</span>
-            </div>
-          )}
-          
           <div className="hidden md:flex items-center space-x-3 bg-white/80 rounded-full px-4 py-2 border border-white/30 shadow-sm">
             <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
               <User className="w-4 h-4 text-white" />
