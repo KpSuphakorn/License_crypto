@@ -13,6 +13,11 @@ class RegisterUser(BaseModel):
     phone_number: str 
     email: str
     password: str
+    rank: str                # ยศ
+    position: str            # ตำแหน่ง
+    division: str            # กองกำกับการ
+    bureau: str              # กองบังคับการ
+    command: str             # กองบัญชาการ
     role: UserRole = UserRole.USER  # Default role is user
 
 class LoginUser(BaseModel):
@@ -25,4 +30,4 @@ class UpdateUser(BaseModel):
     phone_number: Optional[str] = None
     email: Optional[str] = None
     role: Optional[UserRole] = None
-    is_active: Optional[bool] = None 
+    is_active: Optional[bool] = None
