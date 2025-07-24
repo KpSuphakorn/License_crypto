@@ -87,19 +87,30 @@ def download_usage_logs(
     license_id: Optional[str] = None,
     action: Optional[str] = None
 ):
-    """Download usage logs as CSV (admin only)"""
+    """Download usage logs as CSV with optional filtering (admin only)"""
     log_collection = get_usage_log_collection()
     
     # Build query filter
     query = {}
     
     if start_date:
-        query["timestamp"] = {"$gte": start_date}
+        try:
+            # Validate and parse start_date
+            datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            query["timestamp"] = {"$gte": start_date}
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format")
+    
     if end_date:
-        if "timestamp" in query:
-            query["timestamp"]["$lte"] = end_date
-        else:
-            query["timestamp"] = {"$lte": end_date}
+        try:
+            # Validate and parse end_date
+            datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            if "timestamp" in query:
+                query["timestamp"]["$lte"] = end_date
+            else:
+                query["timestamp"] = {"$lte": end_date}
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format")
     
     if user_id:
         query["user_id"] = user_id
@@ -127,9 +138,12 @@ def download_usage_logs(
     # Create response
     output.seek(0)
     
-    # Generate filename with timestamp
+    # Generate filename with timestamp and optional date range
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    filename = f"usage_logs_{timestamp}.csv"
+    filename_parts = ["usage_logs", timestamp]
+    if start_date or end_date:
+        filename_parts.append(f"from_{start_date or 'all'}_to_{end_date or 'all'}")
+    filename = f"{'_'.join(filename_parts)}.csv"
     
     return StreamingResponse(
         io.BytesIO(output.getvalue().encode('utf-8')),

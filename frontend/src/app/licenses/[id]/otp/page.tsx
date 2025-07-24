@@ -21,6 +21,7 @@ interface OtpData {
   from: string;
   subject: string;
   date: string;
+  license_id?: string;
 }
 
 interface LicenseData {
@@ -38,7 +39,6 @@ interface LicenseData {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-const FETCH_EMAIL = process.env.NEXT_PUBLIC_FETCH_EMAIL;
 
 export default function OtpPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -47,7 +47,7 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const [licenseData, setLicenseData] = useState<LicenseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(0); // Start with 0, will be updated when data loads
+  const [timeLeft, setTimeLeft] = useState(0);
   const [copied, setCopied] = useState(false);
   const [isExtending, setIsExtending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,7 +71,7 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
         const userData = await userRes.json();
         setCurrentUser(userData);
 
-        // First, activate the license (this starts the 2-hour timer)
+        // Activate the license
         try {
           const activateRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}/activate`, {
             method: 'POST',
@@ -83,18 +83,11 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
           
           if (!activateRes.ok) {
             const errorData = await activateRes.json().catch(() => ({}));
-            console.error('License activation failed:', errorData);
-            
-            // If it's a 400 error saying it's already active, that's actually okay
-            if (activateRes.status === 400 && errorData.detail?.includes('already active')) {
-              console.log('License is already active - continuing...');
-            } else {
+            if (activateRes.status !== 400 || !errorData.detail?.includes('already active')) {
               throw new Error(errorData.detail || 'Failed to activate license');
             }
           } else {
             const activateData = await activateRes.json();
-            console.log('License activation successful:', activateData);
-            // Check if activation response contains expires_at
             if (activateData.expires_at) {
               const expiresAt = new Date(activateData.expires_at);
               const now = new Date();
@@ -103,55 +96,47 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
             }
           }
         } catch (activateError: any) {
-          console.error('License activation failed:', activateError.message);
-          // Don't throw error if it's already active
           if (!activateError.message.includes('already active')) {
             throw new Error(`License activation failed: ${activateError.message}`);
           }
         }
 
-        // Fetch OTP data
-        const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&from_email=${FETCH_EMAIL}`);
-        if (!otpRes.ok) throw new Error(`OTP fetch error: ${otpRes.status}`);
-        const otpJson: OtpData = await otpRes.json();
-        setOtpData(otpJson);
-
-        // Fetch License data AFTER activation to get updated expiration time
+        // Fetch License data
         const licenseRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (!licenseRes.ok) throw new Error(`License fetch error: ${licenseRes.status}`);
         const licenseJson: LicenseData = await licenseRes.json();
-        
-        console.log('License data after activation:', licenseJson);
-        
-        // Check if user has permission to access this license
+        setLicenseData(licenseJson);
+
         if (licenseJson.current_user !== userData.user_id) {
           throw new Error('You do not have permission to access this license');
         }
-        
-        setLicenseData(licenseJson);
-        
-        // Calculate time left from expires_at
+
+        // Fetch OTP using license_id and licenseData.gmail
+        if (licenseJson.gmail) {
+          const licenseKey = `license${parseInt(licenseJson.No, 10)}`; // เช่น "01" -> 1 -> "license1"
+          const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&license_id=${licenseKey}`);
+          if (!otpRes.ok) throw new Error(`OTP fetch error: ${otpRes.status}`);
+          const otpJson: OtpData = await otpRes.json();
+          setOtpData(otpJson);
+        } else {
+          throw new Error('License email not found');
+        }
+
+        // Calculate time left
         if (licenseJson.expires_at) {
           const expiresAt = new Date(licenseJson.expires_at);
           const now = new Date();
-          
-          // Check if the dates are valid
           if (isNaN(expiresAt.getTime()) || isNaN(now.getTime())) {
             console.error('Invalid date format:', { expires_at: licenseJson.expires_at });
             setTimeLeft(0);
-            return;
+          } else {
+            const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
+            setTimeLeft(timeLeftSeconds);
           }
-          
-          const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
-          setTimeLeft(timeLeftSeconds);
         } else {
-          console.warn('No expires_at found in license data, setting default time');
-          // If no expires_at, try to calculate from current time + 2 hours
-          const defaultTimeLeft = 120 * 60; // 2 hours in seconds
+          const defaultTimeLeft = 120 * 60; // 2 hours
           setTimeLeft(defaultTimeLeft);
         }
         
@@ -165,12 +150,9 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
 
     fetchData();
 
-    // Start the countdown timer - only count down if timeLeft > 0
+    // Countdown timer
     const intervalId = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 0) return 0; // Don't count down if already at 0
-        return Math.max(0, prev - 1);
-      });
+      setTimeLeft(prev => (prev <= 0 ? 0 : prev - 1));
     }, 1000);
 
     return () => clearInterval(intervalId);
@@ -236,12 +218,14 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const handleRefreshOtp = async () => {
     setRefreshing(true);
     try {
-      const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&from_email=suphakorn850@gmail.com`);
+      if (!licenseData?.gmail) throw new Error('License email not found');
+      const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&license_id=${licenseId}`);
       if (!otpRes.ok) throw new Error(`OTP refresh error: ${otpRes.status}`);
       const otpJson: OtpData = await otpRes.json();
       setOtpData(otpJson);
     } catch (err: any) {
       console.error('Failed to refresh OTP:', err);
+      setError(err.message);
     } finally {
       setRefreshing(false);
     }
@@ -269,7 +253,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
     } catch (error: any) {
       console.error('Error releasing license:', error);
       alert(error.message || 'Failed to release license');
-      // Still navigate away even if release fails
       router.push('/licenses');
     }
   };
@@ -336,7 +319,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50">
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
         <div className="flex items-center mb-8">
           <button
             onClick={handleGoBack}
@@ -348,9 +330,7 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
         </div>
 
         <div className="max-w-lg mx-auto">
-          {/* Main OTP Card */}
           <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-            {/* Header Section */}
             <div className="bg-gradient-to-r from-green-600 to-blue-600 px-8 py-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
@@ -375,9 +355,7 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
               </div>
             </div>
 
-            {/* Content Section */}
             <div className="p-8">
-              {/* OTP Display */}
               <div className="text-center mb-8">
                 <label className="block text-gray-700 text-lg font-semibold mb-4">
                   รหัส OTP ของคุณ
@@ -407,7 +385,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
                 )}
               </div>
 
-              {/* Timer Section */}
               <div className="text-center mb-8">
                 <div className="flex items-center justify-center mb-4">
                   <Timer className={`w-6 h-6 mr-2 ${
@@ -439,10 +416,8 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
                   </div>
                 )}
               </div>
-
             </div>
 
-            {/* Action Buttons */}
             <div className="px-8 pb-8">
               <div className="flex flex-col sm:flex-row gap-4">
                 <button
@@ -484,7 +459,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
             </div>
           </div>
 
-          {/* Usage Tips */}
           <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
             <div className="flex items-start">
               <Shield className="w-5 h-5 text-blue-600 mr-3 mt-0.5" />
