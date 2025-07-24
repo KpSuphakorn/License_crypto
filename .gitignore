@@ -61,3 +61,7 @@ Thumbs.db
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+
+*.pyc
+__pycache__/
