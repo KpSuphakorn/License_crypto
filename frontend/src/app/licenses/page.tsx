@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { User, LogOut, Search, Filter, Grid, List, RefreshCw, Eye, Lock, Users, Clock, CheckCircle, AlertCircle, Calendar, Timer, Bell, UserCheck, UserX, Activity, Download, X } from 'lucide-react';
+import { Search, Grid, List, RefreshCw, CheckCircle, AlertCircle, Calendar, Timer, UserCheck, Download, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
-import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { format } from 'date-fns';
 import CustomDatePicker from '@/components/DatePicker/DatePicker';
@@ -36,20 +35,12 @@ interface UserInfo {
   user_id?: string;
 }
 
-interface QueueItem {
-  user_id: string;
-  user_name: string;
-  requested_at: string;
-  priority: number;
-}
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export default function LicenseManagementDashboard() {
   const [licenses, setLicenses] = useState<License[]>([]);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in-use' | 'queued'>('all');
@@ -96,8 +87,8 @@ export default function LicenseManagementDashboard() {
       const licensesData = await licensesRes.json();
       setLicenses(licensesData.licensess || []);
       setConnectionStatus('connected');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      console.error('Failed to fetch licenses:', err);
       setConnectionStatus('disconnected');
     } finally {
       if (isAutoRefresh) {
@@ -120,8 +111,8 @@ export default function LicenseManagementDashboard() {
         setUserInfo(userData);
 
         await fetchLicenses();
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        console.error('Failed to fetch initial data:', err);
       } finally {
         setLoading(false);
       }
@@ -186,13 +177,12 @@ export default function LicenseManagementDashboard() {
         throw new Error(errorData.detail || 'Failed to request license');
       }
       
-      const result = await response.json();
-      
       // Refresh the licenses list to show the updated state
       await fetchLicenses();
       router.push(`/licenses/${license._id}?fromRequest=true`);
-    } catch (error: any) {
-      alert(error.message || 'An error occurred while requesting the license. Please try again.');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while requesting the license. Please try again.';
+      alert(errorMessage);
     } finally {
       setRequestingLicense(null);
     }
@@ -218,8 +208,9 @@ export default function LicenseManagementDashboard() {
       }
       await fetchLicenses();
       alert('License released successfully!');
-    } catch (error: any) {
-      alert(error.message || 'An error occurred while releasing the license. Please try again.');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while releasing the license. Please try again.';
+      alert(errorMessage);
     } finally {
       setReleasingLicense(null);
     }
@@ -250,9 +241,10 @@ export default function LicenseManagementDashboard() {
       
       alert('Reservation cancelled successfully!');
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error cancelling reservation:', error);
-      alert(error.message || 'An error occurred while cancelling the reservation. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while cancelling the reservation. Please try again.';
+      alert(errorMessage);
     } finally {
       setCancelingLicense(null);
     }
@@ -306,9 +298,10 @@ export default function LicenseManagementDashboard() {
       
       setShowDownloadModal(false);
       setDownloadFilters({ start_date: '', end_date: '', user_id: '', license_id: '', action: '' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error downloading logs:', error);
-      alert(error.message || 'An error occurred while downloading logs. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while downloading logs. Please try again.';
+      alert(errorMessage);
     }
   };
 
@@ -335,7 +328,6 @@ export default function LicenseManagementDashboard() {
 
   const availableCount = licenses.filter(l => l.is_available).length;
   const inUseCount = licenses.filter(l => !l.is_available).length;
-  const totalQueueCount = licenses.reduce((sum, l) => sum + (l.queue_count || 0), 0);
 
   const formatTimeRemaining = (expiresAt?: string) => {
     if (!expiresAt) return '';
@@ -491,7 +483,7 @@ export default function LicenseManagementDashboard() {
                     selected={downloadFilters.start_date ? new Date(downloadFilters.start_date) : null}
                     onChange={(date: Date | null) => handleFilterChange({
                       target: { name: 'start_date', value: date ? format(date, 'yyyy-MM-dd') : '' }
-                    } as any)}
+                    } as React.ChangeEvent<HTMLInputElement>)}
                     placeholderText="Select start date"
                     dateFormat="yyyy-MM-dd"
                     isClearable={true}
@@ -505,7 +497,7 @@ export default function LicenseManagementDashboard() {
                     selected={downloadFilters.end_date ? new Date(downloadFilters.end_date) : null}
                     onChange={(date: Date | null) => handleFilterChange({
                       target: { name: 'end_date', value: date ? format(date, 'yyyy-MM-dd') : '' }
-                    } as any)}
+                    } as React.ChangeEvent<HTMLInputElement>)}
                     placeholderText="Select end date"
                     dateFormat="yyyy-MM-dd"
                     isClearable={true}
