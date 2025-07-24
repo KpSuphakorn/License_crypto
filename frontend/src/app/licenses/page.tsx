@@ -380,12 +380,6 @@ export default function LicenseManagementDashboard() {
       <div className="container mx-auto px-6 py-8">
         <div className="flex flex-col md:flex-row justify-center gap-6 mb-8">
           <div className="fixed top-20 right-4 flex flex-col space-y-2 z-50">
-            {isAutoRefreshing && (
-              <div className="bg-blue-500 text-white px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Syncing...</span>
-              </div>
-            )}
             {connectionStatus === 'disconnected' && (
               <div className="bg-red-500 text-white px-3 py-2 rounded-lg shadow-lg flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4" />
