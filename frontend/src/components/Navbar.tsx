@@ -10,10 +10,9 @@ interface NavbarProps {
   onRefresh: () => void;
   isRefreshing: boolean;
   onLogout: () => void;
-  isAutoRefreshing?: boolean;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ userInfo, onRefresh, isRefreshing, onLogout, isAutoRefreshing = false }) => (
+const Navbar: React.FC<NavbarProps> = ({ userInfo, onRefresh, isRefreshing, onLogout }) => (
   <header className="bg-white/90 backdrop-blur-md border-b border-white/20 sticky top-0 z-50 shadow-sm">
     <div className="container mx-auto px-6 py-4">
       <div className="flex items-center justify-between">

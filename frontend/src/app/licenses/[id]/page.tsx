@@ -29,7 +29,7 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
   const router = useRouter();
 
   const [licenseDetails, setLicenseDetails] = useState<LicenseDetails | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<{ user_id?: string; role?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -133,8 +133,9 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
         }
         
         setLicenseDetails(data);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch license details';
+        setError(errorMessage);
         console.error(`Failed to fetch license details for ID ${licenseId}:`, err);
       } finally {
         setLoading(false);
@@ -181,9 +182,10 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
       alert('License released successfully!');
       router.push('/licenses');
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error releasing license:', error);
-      alert(error.message || 'An error occurred while releasing the license. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while releasing the license. Please try again.';
+      alert(errorMessage);
     } finally {
       setIsReleasing(false);
     }

@@ -46,8 +46,9 @@ export default function LoginPage() {
         router.push('/licenses');
       }, 1000);
       
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Login failed';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

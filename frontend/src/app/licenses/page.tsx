@@ -45,7 +45,6 @@ export default function LicenseManagementDashboard() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in-use' | 'queued'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [requestingLicense, setRequestingLicense] = useState<string | null>(null);
   const [cancelingLicense, setCancelingLicense] = useState<string | null>(null);
@@ -65,7 +64,6 @@ export default function LicenseManagementDashboard() {
   const fetchLicenses = async (isAutoRefresh = false) => {
     try {
       if (isAutoRefresh) {
-        setIsAutoRefreshing(true);
         setConnectionStatus('checking');
       }
       
@@ -91,9 +89,7 @@ export default function LicenseManagementDashboard() {
       console.error('Failed to fetch licenses:', err);
       setConnectionStatus('disconnected');
     } finally {
-      if (isAutoRefresh) {
-        setTimeout(() => setIsAutoRefreshing(false), 1000);
-      }
+      // Auto-refresh completed, no UI updates needed
     }
   };
 
@@ -367,7 +363,6 @@ export default function LicenseManagementDashboard() {
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
         onLogout={handleLogout}
-        isAutoRefreshing={isAutoRefreshing}
       />
       <div className="container mx-auto px-6 py-8">
         <div className="flex flex-col md:flex-row justify-center gap-6 mb-8">
@@ -440,7 +435,7 @@ export default function LicenseManagementDashboard() {
             )}
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
+              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'available' | 'in-use' | 'queued')}
               className="px-4 py-3 bg-white/80 backdrop-blur-sm rounded-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-200"
             >
               <option value="all">All Licenses</option>

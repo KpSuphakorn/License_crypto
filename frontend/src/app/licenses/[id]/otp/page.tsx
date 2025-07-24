@@ -3,7 +3,6 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Clock, 
   Copy, 
   Check, 
   RefreshCw, 
@@ -11,7 +10,6 @@ import {
   ArrowLeft, 
   AlertCircle, 
   Timer,
-  Mail,
   User,
   Zap
 } from 'lucide-react';
@@ -51,7 +49,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const [copied, setCopied] = useState(false);
   const [isExtending, setIsExtending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -69,7 +66,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
         });
         if (!userRes.ok) throw new Error('Failed to fetch user info');
         const userData = await userRes.json();
-        setCurrentUser(userData);
 
         // Activate the license
         try {
@@ -95,9 +91,10 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
               setTimeLeft(timeLeftSeconds);
             }
           }
-        } catch (activateError: any) {
-          if (!activateError.message.includes('already active')) {
-            throw new Error(`License activation failed: ${activateError.message}`);
+        } catch (activateError: unknown) {
+          const errorMessage = activateError instanceof Error ? activateError.message : 'Unknown error';
+          if (!errorMessage.includes('already active')) {
+            throw new Error(`License activation failed: ${errorMessage}`);
           }
         }
 
@@ -140,8 +137,9 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
           setTimeLeft(defaultTimeLeft);
         }
         
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+        setError(errorMessage);
         console.error("Fetch failed:", err);
       } finally {
         setLoading(false);
@@ -202,13 +200,14 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
           throw new Error(errorData.detail || 'Failed to extend license');
         }
         
-        const result = await response.json();
+        await response.json();
         setTimeLeft(120 * 60); // Reset to 2 hours
         alert('License extended successfully!');
         
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error extending license:', error);
-        alert(error.message || 'Failed to extend license');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to extend license';
+        alert(errorMessage);
       } finally {
         setIsExtending(false);
       }
@@ -223,9 +222,10 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
       if (!otpRes.ok) throw new Error(`OTP refresh error: ${otpRes.status}`);
       const otpJson: OtpData = await otpRes.json();
       setOtpData(otpJson);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to refresh OTP:', err);
-      setError(err.message);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh OTP';
+      setError(errorMessage);
     } finally {
       setRefreshing(false);
     }
@@ -250,9 +250,10 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
       alert('License released successfully!');
       router.push('/licenses');
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error releasing license:', error);
-      alert(error.message || 'Failed to release license');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to release license';
+      alert(errorMessage);
       router.push('/licenses');
     }
   };
