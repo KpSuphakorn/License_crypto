@@ -30,7 +30,11 @@ interface LicenseData {
   password: string;
   gmail: string;
   mail_password: string;
-  is_avaliable?: boolean;
+  is_available?: boolean;
+  current_user?: string;
+  current_user_name?: string;
+  assigned_at?: string;
+  expires_at?: string;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -43,24 +47,76 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const [licenseData, setLicenseData] = useState<LicenseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(120 * 60); // 2 hours in seconds
+  const [timeLeft, setTimeLeft] = useState(0); // Start with 0, will be updated when data loads
   const [copied, setCopied] = useState(false);
   const [isExtending, setIsExtending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('No authentication token found');
+        }
+
+        // Fetch current user info
+        const userRes = await fetch(`${API_BASE_URL}/auth`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!userRes.ok) throw new Error('Failed to fetch user info');
+        const userData = await userRes.json();
+        setCurrentUser(userData);
+
+        // First, activate the license (this starts the 2-hour timer)
+        try {
+          const activateRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}/activate`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (!activateRes.ok) {
+            const errorData = await activateRes.json().catch(() => ({}));
+            console.error('License activation failed:', errorData);
+            
+            // If it's a 400 error saying it's already active, that's actually okay
+            if (activateRes.status === 400 && errorData.detail?.includes('already active')) {
+              console.log('License is already active - continuing...');
+            } else {
+              throw new Error(errorData.detail || 'Failed to activate license');
+            }
+          } else {
+            const activateData = await activateRes.json();
+            console.log('License activation successful:', activateData);
+            // Check if activation response contains expires_at
+            if (activateData.expires_at) {
+              const expiresAt = new Date(activateData.expires_at);
+              const now = new Date();
+              const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
+              setTimeLeft(timeLeftSeconds);
+            }
+          }
+        } catch (activateError: any) {
+          console.error('License activation failed:', activateError.message);
+          // Don't throw error if it's already active
+          if (!activateError.message.includes('already active')) {
+            throw new Error(`License activation failed: ${activateError.message}`);
+          }
+        }
+
         // Fetch OTP data
         const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&from_email=${FETCH_EMAIL}`);
         if (!otpRes.ok) throw new Error(`OTP fetch error: ${otpRes.status}`);
         const otpJson: OtpData = await otpRes.json();
         setOtpData(otpJson);
 
-        // Fetch License data using licenseId
-        const token = localStorage.getItem('token');
+        // Fetch License data AFTER activation to get updated expiration time
         const licenseRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -68,7 +124,37 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
         });
         if (!licenseRes.ok) throw new Error(`License fetch error: ${licenseRes.status}`);
         const licenseJson: LicenseData = await licenseRes.json();
+        
+        console.log('License data after activation:', licenseJson);
+        
+        // Check if user has permission to access this license
+        if (licenseJson.current_user !== userData.user_id) {
+          throw new Error('You do not have permission to access this license');
+        }
+        
         setLicenseData(licenseJson);
+        
+        // Calculate time left from expires_at
+        if (licenseJson.expires_at) {
+          const expiresAt = new Date(licenseJson.expires_at);
+          const now = new Date();
+          
+          // Check if the dates are valid
+          if (isNaN(expiresAt.getTime()) || isNaN(now.getTime())) {
+            console.error('Invalid date format:', { expires_at: licenseJson.expires_at });
+            setTimeLeft(0);
+            return;
+          }
+          
+          const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
+          setTimeLeft(timeLeftSeconds);
+        } else {
+          console.warn('No expires_at found in license data, setting default time');
+          // If no expires_at, try to calculate from current time + 2 hours
+          const defaultTimeLeft = 120 * 60; // 2 hours in seconds
+          setTimeLeft(defaultTimeLeft);
+        }
+        
       } catch (err: any) {
         setError(err.message);
         console.error("Fetch failed:", err);
@@ -79,8 +165,12 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
 
     fetchData();
 
+    // Start the countdown timer - only count down if timeLeft > 0
     const intervalId = setInterval(() => {
-      setTimeLeft(prev => Math.max(0, prev - 1));
+      setTimeLeft(prev => {
+        if (prev <= 0) return 0; // Don't count down if already at 0
+        return Math.max(0, prev - 1);
+      });
     }, 1000);
 
     return () => clearInterval(intervalId);
@@ -115,10 +205,31 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const handleExtendTime = async () => {
     if (timeLeft <= 900) {
       setIsExtending(true);
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setTimeLeft(120 * 60); // Reset to 2 hours
-      setIsExtending(false);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/licenses/${licenseId}/extend`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'Failed to extend license');
+        }
+        
+        const result = await response.json();
+        setTimeLeft(120 * 60); // Reset to 2 hours
+        alert('License extended successfully!');
+        
+      } catch (error: any) {
+        console.error('Error extending license:', error);
+        alert(error.message || 'Failed to extend license');
+      } finally {
+        setIsExtending(false);
+      }
     }
   };
 
@@ -136,8 +247,31 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
     }
   };
 
-  const handleFinish = () => {
-    router.push('/licenses');
+  const handleFinish = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/licenses/${licenseId}/release`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to release license');
+      }
+      
+      alert('License released successfully!');
+      router.push('/licenses');
+      
+    } catch (error: any) {
+      console.error('Error releasing license:', error);
+      alert(error.message || 'Failed to release license');
+      // Still navigate away even if release fails
+      router.push('/licenses');
+    }
   };
 
   const handleGoBack = () => {

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Eye, EyeOff, Phone, Lock, User, AlertCircle, CheckCircle, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, Phone, Lock, User, AlertCircle, CheckCircle, UserPlus, Mail } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -10,6 +10,7 @@ export default function RegisterPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -19,6 +20,11 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [rank, setRank] = useState('');
+  const [position, setPosition] = useState('');
+  const [division, setDivision] = useState('');
+  const [bureau, setBureau] = useState('');
+  const [command, setCommand] = useState('');
   const router = useRouter();
 
   const formatPhoneNumber = (value: string) => {
@@ -58,7 +64,13 @@ export default function RegisterPage() {
           first_name: firstName,
           last_name: lastName,
           phone_number: cleanPhoneNumber,
+          email,
           password,
+          rank,
+          position,
+          division,
+          bureau,
+          command,
         }),
       });
       if (!response.ok) {
@@ -103,61 +115,219 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* First Name Field */}
+            {/* กลุ่ม 2 คอลัมน์: ชื่อจริง - นามสกุล */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* First Name Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <User size={16} className="text-blue-600" />
+                  ชื่อจริง
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="ชื่อจริง"
+                    className={`w-full px-4 py-3 pl-12 rounded-xl border-2 transition-all duration-200 focus:outline-none placeholder:text-gray-400 ${
+                      focusedField === 'firstName'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    value={firstName}
+                    onChange={e => setFirstName(e.target.value)}
+                    onFocus={() => setFocusedField('firstName')}
+                    onBlur={() => setFocusedField(null)}
+                    required
+                  />
+                  <User
+                    size={20}
+                    className={`absolute left-3 top-1/2 transform -translate-y-1/2 transition-colors duration-200 ${
+                      focusedField === 'firstName' ? 'text-blue-500' : 'text-gray-400'
+                    }`}
+                  />
+                </div>
+              </div>
+              {/* Last Name Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-2 ">
+                  <User size={16} className="text-blue-600" />
+                  นามสกุล
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="นามสกุล"
+                    className={`w-full px-4 py-3 pl-12 rounded-xl border-2 transition-all duration-200 focus:outline-none placeholder:text-gray-400 ${
+                      focusedField === 'lastName'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    value={lastName}
+                    onChange={e => setLastName(e.target.value)}
+                    onFocus={() => setFocusedField('lastName')}
+                    onBlur={() => setFocusedField(null)}
+                    required
+                  />
+                  <User
+                    size={20}
+                    className={`absolute left-3 top-1/2 transform -translate-y-1/2 transition-colors duration-200 ${
+                      focusedField === 'firstName' ? 'text-blue-500' : 'text-gray-400'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* กลุ่ม 2 คอลัมน์: ยศ - ตำแหน่ง */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Rank Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  ยศ
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="ยศ"
+                    className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none placeholder:text-gray-400 ${
+                      focusedField === 'rank'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    value={rank}
+                    onChange={e => setRank(e.target.value)}
+                    onFocus={() => setFocusedField('rank')}
+                    onBlur={() => setFocusedField(null)}
+                    required
+                  />
+                </div>
+              </div>
+              {/* Position Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  ตำแหน่ง
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="ตำแหน่ง"
+                    className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none placeholder:text-gray-400 ${
+                      focusedField === 'position'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    value={position}
+                    onChange={e => setPosition(e.target.value)}
+                    onFocus={() => setFocusedField('position')}
+                    onBlur={() => setFocusedField(null)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* กลุ่ม 2 คอลัมน์: กองกำกับการ - กองบังคับการ */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Division Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  กองกำกับการ
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="กองกำกับการ"
+                    className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none placeholder:text-gray-400 ${
+                      focusedField === 'division'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    value={division}
+                    onChange={e => setDivision(e.target.value)}
+                    onFocus={() => setFocusedField('division')}
+                    onBlur={() => setFocusedField(null)}
+                    required
+                  />
+                </div>
+              </div>
+              {/* Bureau Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  กองบังคับการ
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="กองบังคับการ"
+                    className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none placeholder:text-gray-400 ${
+                      focusedField === 'bureau'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    value={bureau}
+                    onChange={e => setBureau(e.target.value)}
+                    onFocus={() => setFocusedField('bureau')}
+                    onBlur={() => setFocusedField(null)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* กองบัญชาการ (เดี่ยว) */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                 <User size={16} className="text-blue-600" />
-                ชื่อจริง
+                กองบัญชาการ
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="ชื่อจริง"
+                  placeholder="กองบัญชาการ"
                   className={`w-full px-4 py-3 pl-12 rounded-xl border-2 transition-all duration-200 focus:outline-none placeholder:text-gray-400 ${
-                    focusedField === 'firstName' 
-                      ? 'border-blue-500 bg-blue-50/50 shadow-md' 
+                    focusedField === 'command'
+                      ? 'border-blue-500 bg-blue-50/50 shadow-md'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
-                  value={firstName}
-                  onChange={e => setFirstName(e.target.value)}
-                  onFocus={() => setFocusedField('firstName')}
+                  value={command}
+                  onChange={e => setCommand(e.target.value)}
+                  onFocus={() => setFocusedField('command')}
                   onBlur={() => setFocusedField(null)}
                   required
                 />
-                <User 
-                  size={20} 
+                <User
+                  size={20}
                   className={`absolute left-3 top-1/2 transform -translate-y-1/2 transition-colors duration-200 ${
-                    focusedField === 'firstName' ? 'text-blue-500' : 'text-gray-400'
-                  }`} 
+                    focusedField === 'command' ? 'text-blue-500' : 'text-gray-400'
+                  }`}
                 />
               </div>
             </div>
 
-            {/* Last Name Field */}
+            {/* Email Field */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                <User size={16} className="text-blue-600" />
-                นามสกุล
+                <Mail size={16} className="text-blue-600" />
+                อีเมล
               </label>
               <div className="relative">
                 <input
-                  type="text"
-                  placeholder="นามสกุล"
+                  type="email"
+                  placeholder="อีเมล"
                   className={`w-full px-4 py-3 pl-12 rounded-xl border-2 transition-all duration-200 focus:outline-none placeholder:text-gray-400 ${
-                    focusedField === 'lastName' 
+                    focusedField === 'email' 
                       ? 'border-blue-500 bg-blue-50/50 shadow-md' 
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
-                  value={lastName}
-                  onChange={e => setLastName(e.target.value)}
-                  onFocus={() => setFocusedField('lastName')}
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  onFocus={() => setFocusedField('email')}
                   onBlur={() => setFocusedField(null)}
                   required
                 />
-                <User 
+                <Mail 
                   size={20} 
                   className={`absolute left-3 top-1/2 transform -translate-y-1/2 transition-colors duration-200 ${
-                    focusedField === 'lastName' ? 'text-blue-500' : 'text-gray-400'
+                    focusedField === 'email' ? 'text-blue-500' : 'text-gray-400'
                   }`} 
                 />
               </div>
@@ -346,4 +516,4 @@ export default function RegisterPage() {
       </div>
     </div>
   );
-} 
+}
