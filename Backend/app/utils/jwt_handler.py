@@ -3,9 +3,9 @@ from jose import JWTError, jwt
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # โหลดค่าจาก .env
+load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY")  # โหลดจาก .env
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 

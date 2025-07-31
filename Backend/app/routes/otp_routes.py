@@ -4,10 +4,7 @@ import os
 import imaplib
 import email
 import re
-import smtplib
-from email.mime.text import MIMEText
-from email.header import Header
-from email.utils import parsedate_to_datetime, parseaddr
+from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
 load_dotenv()
@@ -18,23 +15,18 @@ LICENSE_ACCOUNTS = {
         "password": os.getenv(f"LICENSE{i}_PASSWORD")
     } for i in range(1, 13)
 }
-print("LICENSE_ACCOUNTS:", LICENSE_ACCOUNTS)
 
 IMAP_SERVER = os.getenv("IMAP_SERVER")
-SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT"))
 
 router = APIRouter(prefix="/otp", tags=["OTP"])
 
 @router.get("/get")
 def get_otp(
-    subject_keyword: str = Query("Your one-time security code", description="Keyword in subject"),
-    license_id: str = Query(..., description="License ID (e.g., license1, license2)"),
+    subject_keyword: str = Query("Your one-time security code"),
+    license_id: str = Query(...),
 ):
     license_id = license_id.strip()
-    print(f"Received license_id: {license_id}")
     if license_id not in LICENSE_ACCOUNTS or not LICENSE_ACCOUNTS[license_id]["email"]:
-        print(f"Invalid license_id: {license_id}")
         raise HTTPException(status_code=400, detail="Invalid license ID")
     
     license = LICENSE_ACCOUNTS[license_id]
@@ -87,45 +79,3 @@ def get_otp(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch OTP: {str(e)}")
-
-@router.post("/mock-send")
-def mock_send_otp_email(
-    otp: str = Query(..., description="OTP to send"),
-    license_id: str = Query(..., description="License ID (e.g., license1, license2)"),
-):
-    try:
-        if license_id not in LICENSE_ACCOUNTS:
-            raise HTTPException(status_code=400, detail="Invalid license ID")
-
-        license = LICENSE_ACCOUNTS[license_id]
-        if not license["email"] or not license["password"]:
-            raise HTTPException(status_code=400, detail="License email or password not configured")
-
-        subject = "รหัส OTP สำหรับการเข้าใช้งานระบบ"
-        html_body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f2f2f2; padding: 30px;">
-            <div style="background-color: white; max-width: 500px; margin: auto; padding: 40px; border-radius: 10px;">
-                <h2 style="margin-bottom: 20px;">รหัสลงชื่อเข้าใช้</h2>
-                <p style="color: #555;">นี่คือรหัสลงชื่อเข้าใช้ของคุณ:</p>
-                <div style="font-size: 36px; font-weight: bold; letter-spacing: 10px; margin: 20px 0;">{otp}</div>
-                <p style="color: #999;">รหัสจะหมดอายุในเร็ว ๆ นี้</p>
-            </div>
-        </body>
-        </html>
-        """
-
-        msg = MIMEText(html_body, "html", "utf-8")
-        msg["Subject"] = Header(subject, "utf-8")
-        msg["From"] = f"License <{license['email']}>"
-        msg["To"] = license["email"]
-
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(license["email"], license["password"])
-        server.sendmail(license["email"], [license["email"]], msg.as_string())
-        server.quit()
-
-        return {"message": f"Mock OTP email sent to {license['email']} from {license['email']}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

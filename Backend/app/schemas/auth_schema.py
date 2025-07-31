@@ -1,7 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from enum import Enum
 from typing import Optional
-from datetime import datetime
 
 class UserRole(str, Enum):
     ADMIN = "admin"
@@ -13,12 +12,12 @@ class RegisterUser(BaseModel):
     phone_number: str 
     email: str
     password: str
-    rank: str                # ยศ
-    position: str            # ตำแหน่ง
-    division: str            # กองกำกับการ
-    bureau: str              # กองบังคับการ
-    command: str             # กองบัญชาการ
-    role: UserRole = UserRole.USER  # Default role is user
+    rank: str
+    position: str
+    division: str
+    bureau: str
+    command: str
+    role: UserRole = UserRole.USER
 
 class LoginUser(BaseModel):
     phone_number: str 

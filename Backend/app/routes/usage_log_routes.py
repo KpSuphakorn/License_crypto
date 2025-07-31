@@ -1,7 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from app.dependencies.auth import require_admin
 from app.models.usage_log_model import get_usage_log_collection
-from app.schemas.usage_log_schema import UsageLog
 from datetime import datetime, timedelta
 from fastapi.responses import StreamingResponse
 import csv
@@ -13,7 +12,6 @@ router = APIRouter(prefix="/usage-logs", tags=["Usage Logs"])
 def log_usage(user_id: str, user_name: str, license_id: str, license_no: str, action: str, 
               duration_seconds: Optional[int] = None, ip_address: Optional[str] = None, 
               user_agent: Optional[str] = None):
-    """Helper function to log usage events"""
     try:
         log_collection = get_usage_log_collection()
         log_data = {
@@ -41,10 +39,8 @@ def get_usage_logs(
     limit: int = 100,
     skip: int = 0
 ):
-    """Get usage logs with optional filtering (admin only)"""
     log_collection = get_usage_log_collection()
     
-    # Build query filter
     query = {}
     
     if start_date:
@@ -62,14 +58,11 @@ def get_usage_logs(
     if action:
         query["action"] = action
     
-    # Get logs
     logs = list(log_collection.find(query).sort("timestamp", -1).skip(skip).limit(limit))
     
-    # Convert ObjectId to string
     for log in logs:
         log["_id"] = str(log["_id"])
     
-    # Get total count
     total_count = log_collection.count_documents(query)
     
     return {
@@ -87,15 +80,12 @@ def download_usage_logs(
     license_id: Optional[str] = None,
     action: Optional[str] = None
 ):
-    """Download usage logs as CSV with optional filtering (admin only)"""
     log_collection = get_usage_log_collection()
     
-    # Build query filter
     query = {}
     
     if start_date:
         try:
-            # Validate and parse start_date
             datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             query["timestamp"] = {"$gte": start_date}
         except ValueError:
@@ -103,7 +93,6 @@ def download_usage_logs(
     
     if end_date:
         try:
-            # Validate and parse end_date
             datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if "timestamp" in query:
                 query["timestamp"]["$lte"] = end_date
@@ -119,10 +108,8 @@ def download_usage_logs(
     if action:
         query["action"] = action
     
-    # Get logs
     logs = list(log_collection.find(query).sort("timestamp", -1))
     
-    # Create CSV content
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=[
         'timestamp', 'user_id', 'user_name', 'license_id', 'license_no', 
@@ -131,14 +118,11 @@ def download_usage_logs(
     
     writer.writeheader()
     for log in logs:
-        # Remove _id field and write row
         log.pop('_id', None)
         writer.writerow(log)
     
-    # Create response
     output.seek(0)
     
-    # Generate filename with timestamp and optional date range
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename_parts = ["usage_logs", timestamp]
     if start_date or end_date:
@@ -153,10 +137,8 @@ def download_usage_logs(
 
 @router.get("/stats", dependencies=[Depends(require_admin)])
 def get_usage_stats():
-    """Get usage statistics (admin only)"""
     log_collection = get_usage_log_collection()
     
-    # Get stats for the last 30 days
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     thirty_days_ago_str = thirty_days_ago.isoformat() + "Z"
     
@@ -170,7 +152,6 @@ def get_usage_stats():
     
     action_stats = list(log_collection.aggregate(pipeline))
     
-    # Get user stats
     user_pipeline = [
         {"$match": {"timestamp": {"$gte": thirty_days_ago_str}}},
         {"$group": {

@@ -13,16 +13,13 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 def register_user(user: RegisterUser):
     user_collection = get_user_collection()
 
-    # ตรวจสอบ domain ของอีเมล
     allowed_domains = ["@cyberpolice.go.th"]
     if not any(user.email.lower().endswith(domain) for domain in allowed_domains):
         raise HTTPException(status_code=400, detail="Email must be @cyberpolice.go.th")
 
-    # ตรวจสอบว่าหมายเลขโทรศัพท์ซ้ำหรือไม่
     if user_collection.find_one({"phone_number": user.phone_number}):
         raise HTTPException(status_code=400, detail="Phone number already registered")
     
-    # ตรวจสอบว่าอีเมลซ้ำหรือไม่
     if user_collection.find_one({"email": user.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -46,7 +43,6 @@ def login(user: LoginUser):
     if not user_data.get("is_active", True):
         raise HTTPException(status_code=401, detail="Account is deactivated")
 
-    # Update last login
     user_collection.update_one(
         {"_id": user_data["_id"]},
         {"$set": {"last_login": datetime.utcnow().isoformat() + "Z"}}
@@ -71,16 +67,13 @@ def get_my_info(current_user: dict = Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Convert _id to user_id and make it a string
     user["user_id"] = str(user["_id"])
     del user["_id"]
     
     return user
 
-# Admin-only routes
 @router.get("/users", dependencies=[Depends(require_admin)])
 def get_all_users(current_user: dict = Depends(get_current_user)):
-    """Get all users (admin only)"""
     users = list(get_user_collection().find({}, {"password": 0}))
     for user in users:
         user["user_id"] = str(user["_id"])
@@ -89,7 +82,6 @@ def get_all_users(current_user: dict = Depends(get_current_user)):
 
 @router.put("/users/{user_id}", dependencies=[Depends(require_admin)])
 def update_user(user_id: str, user_update: UpdateUser, current_user: dict = Depends(get_current_user)):
-    """Update user information (admin only)"""
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=400, detail="Invalid user ID")
     
@@ -110,7 +102,6 @@ def update_user(user_id: str, user_update: UpdateUser, current_user: dict = Depe
 
 @router.delete("/users/{user_id}", dependencies=[Depends(require_admin)])
 def deactivate_user(user_id: str, current_user: dict = Depends(get_current_user)):
-    """Deactivate user account (admin only)"""
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=400, detail="Invalid user ID")
     
@@ -124,9 +115,3 @@ def deactivate_user(user_id: str, current_user: dict = Depends(get_current_user)
         raise HTTPException(status_code=404, detail="User not found")
     
     return {"message": "User deactivated successfully"}
-    
-    # Add default role if not present
-    if "role" not in user:
-        user["role"] = "user"
-
-    return user
