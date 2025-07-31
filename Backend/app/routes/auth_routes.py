@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.schemas.auth_schema import RegisterUser, LoginUser, UpdateUser
 from app.models.auth_model import get_user_collection
 from app.utils.jwt_handler import create_access_token
+from app.utils.password_handler import hash_password, verify_password
 from fastapi.responses import JSONResponse
 from app.dependencies.auth import get_current_user, require_admin
 from datetime import datetime
@@ -27,6 +28,8 @@ def register_user(user: RegisterUser):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user_data = user.dict()
+    # Hash the password before storing
+    user_data["password"] = hash_password(user_data["password"])
     user_data["created_at"] = datetime.utcnow().isoformat() + "Z"
     user_data["updated_at"] = datetime.utcnow().isoformat() + "Z"
     user_data["is_active"] = True
@@ -40,7 +43,7 @@ def login(user: LoginUser):
     user_collection = get_user_collection()
     user_data = user_collection.find_one({"phone_number": user.phone_number})
     
-    if not user_data or user_data["password"] != user.password:
+    if not user_data or not verify_password(user.password, user_data["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     if not user_data.get("is_active", True):
