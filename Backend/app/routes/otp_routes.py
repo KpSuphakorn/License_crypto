@@ -11,8 +11,6 @@ from email.utils import parsedate_to_datetime, parseaddr
 from zoneinfo import ZoneInfo
 
 load_dotenv()
-print("LICENSE2_EMAIL:", os.getenv("LICENSE2_EMAIL"))
-print("LICENSE2_PASSWORD:", os.getenv("LICENSE2_PASSWORD"))
 
 LICENSE_ACCOUNTS = {
     f"license{i}": {
@@ -30,10 +28,10 @@ router = APIRouter(prefix="/otp", tags=["OTP"])
 
 @router.get("/get")
 def get_otp(
-    subject_keyword: str = Query("OTP", description="Keyword in subject"),
+    subject_keyword: str = Query("Your one-time security code", description="Keyword in subject"),
     license_id: str = Query(..., description="License ID (e.g., license1, license2)"),
 ):
-    license_id = license_id.strip()  # ลบ whitespace หรือ newline
+    license_id = license_id.strip()
     print(f"Received license_id: {license_id}")
     if license_id not in LICENSE_ACCOUNTS or not LICENSE_ACCOUNTS[license_id]["email"]:
         print(f"Invalid license_id: {license_id}")
@@ -57,10 +55,6 @@ def get_otp(
             result, data = mail.fetch(email_id, "(RFC822)")
             raw_email = data[0][1]
             message = email.message_from_bytes(raw_email)
-
-            from_addr = parseaddr(message["From"])[1]
-            if from_addr.strip().lower() != license["email"].strip().lower():
-                continue
 
             msg_body = ""
             if message.is_multipart():

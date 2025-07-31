@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 interface OtpData {
+  message: any;
   otp: string;
   from: string;
   subject: string;
@@ -60,14 +61,20 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
           throw new Error('No authentication token found');
         }
 
-        // Fetch current user info
         const userRes = await fetch(`${API_BASE_URL}/auth`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!userRes.ok) throw new Error('Failed to fetch user info');
         const userData = await userRes.json();
 
-        // Activate the license
+        const licenseRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!licenseRes.ok) throw new Error(`License fetch error: ${licenseRes.status}`);
+        const licenseJson: LicenseData = await licenseRes.json();
+        
+        setLicenseData(licenseJson);
+
         try {
           const activateRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}/activate`, {
             method: 'POST',
@@ -98,49 +105,55 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
           }
         }
 
-        // Fetch License data
-        const licenseRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!licenseRes.ok) throw new Error(`License fetch error: ${licenseRes.status}`);
-        const licenseJson: LicenseData = await licenseRes.json();
-        setLicenseData(licenseJson);
-
-        if (licenseJson.current_user !== userData.user_id) {
-          throw new Error('You do not have permission to access this license');
-        }
-
-        // Fetch OTP using license_id and licenseData.gmail
         if (licenseJson.gmail) {
-          const licenseKey = `license${parseInt(licenseJson.No, 10)}`; // เช่น "01" -> 1 -> "license1"
-          const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&license_id=${licenseKey}`);
-          if (!otpRes.ok) throw new Error(`OTP fetch error: ${otpRes.status}`);
+          let licenseKey: string;
+          const licenseNo = licenseJson.No;
+          
+          if (licenseNo) {
+            const numericNo = parseInt(licenseNo, 10);
+            licenseKey = `license${numericNo}`;
+          } else {
+            throw new Error('License number not found');
+          }
+          
+          const otpUrl = `${API_BASE_URL}/otp/get?subject_keyword=Your one-time security code&license_id=${licenseKey}`;
+          const otpRes = await fetch(otpUrl);
+          
+          if (!otpRes.ok) {
+            const errorText = await otpRes.text();
+            throw new Error(`OTP fetch error: ${otpRes.status} - ${errorText}`);
+          }
+          
           const otpJson: OtpData = await otpRes.json();
-          setOtpData(otpJson);
+          
+          if (otpJson.otp) {
+            setOtpData(otpJson);
+          } else if (otpJson.message) {
+            setError(`ไม่พบ OTP: ${otpJson.message}`);
+          } else {
+            throw new Error('Invalid OTP response format');
+          }
         } else {
           throw new Error('License email not found');
         }
 
-        // Calculate time left
         if (licenseJson.expires_at) {
           const expiresAt = new Date(licenseJson.expires_at);
           const now = new Date();
           if (isNaN(expiresAt.getTime()) || isNaN(now.getTime())) {
-            console.error('Invalid date format:', { expires_at: licenseJson.expires_at });
             setTimeLeft(0);
           } else {
             const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
             setTimeLeft(timeLeftSeconds);
           }
         } else {
-          const defaultTimeLeft = 120 * 60; // 2 hours
+          const defaultTimeLeft = 120 * 60;
           setTimeLeft(defaultTimeLeft);
         }
         
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
         setError(errorMessage);
-        console.error("Fetch failed:", err);
       } finally {
         setLoading(false);
       }
@@ -148,7 +161,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
 
     fetchData();
 
-    // Countdown timer
     const intervalId = setInterval(() => {
       setTimeLeft(prev => (prev <= 0 ? 0 : prev - 1));
     }, 1000);
@@ -165,8 +177,8 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
 
   const getTimeStatus = () => {
     if (timeLeft <= 0) return 'expired';
-    if (timeLeft <= 900) return 'warning'; // 15 minutes
-    if (timeLeft <= 1800) return 'caution'; // 30 minutes
+    if (timeLeft <= 900) return 'warning';
+    if (timeLeft <= 1800) return 'caution';
     return 'normal';
   };
 
@@ -201,11 +213,10 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
         }
         
         await response.json();
-        setTimeLeft(120 * 60); // Reset to 2 hours
+        setTimeLeft(120 * 60);
         alert('License extended successfully!');
         
       } catch (error: unknown) {
-        console.error('Error extending license:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to extend license';
         alert(errorMessage);
       } finally {
@@ -218,12 +229,12 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
     setRefreshing(true);
     try {
       if (!licenseData?.gmail) throw new Error('License email not found');
-      const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&license_id=${licenseId}`);
+      const licenseKey = `license${parseInt(licenseData.No, 10)}`;
+      const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&license_id=${licenseKey}`);
       if (!otpRes.ok) throw new Error(`OTP refresh error: ${otpRes.status}`);
       const otpJson: OtpData = await otpRes.json();
       setOtpData(otpJson);
     } catch (err: unknown) {
-      console.error('Failed to refresh OTP:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to refresh OTP';
       setError(errorMessage);
     } finally {
@@ -251,7 +262,6 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
       router.push('/licenses');
       
     } catch (error: unknown) {
-      console.error('Error releasing license:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to release license';
       alert(errorMessage);
       router.push('/licenses');

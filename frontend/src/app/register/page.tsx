@@ -52,11 +52,14 @@ export default function RegisterPage() {
       return;
     }
 
+    const cleanPhoneNumber = phone.replace(/\D/g, '');
+    if (cleanPhoneNumber.length !== 10) {
+      setError('กรุณากรอกหมายเลขโทรศัพท์ให้ครบ 10 หลัก');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Remove formatting from phone number before sending to backend
-      const cleanPhoneNumber = phone.replace(/\D/g, '');
-      
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -14,9 +14,9 @@ def register_user(user: RegisterUser):
     user_collection = get_user_collection()
 
     # ตรวจสอบ domain ของอีเมล
-    allowed_domains = ["@police.co.th", "@ccib.go.th"]
+    allowed_domains = ["@cyberpolice.go.th"]
     if not any(user.email.lower().endswith(domain) for domain in allowed_domains):
-        raise HTTPException(status_code=400, detail="Email must be @police.co.th or @ccib.go.th")
+        raise HTTPException(status_code=400, detail="Email must be @cyberpolice.go.th")
 
     # ตรวจสอบว่าหมายเลขโทรศัพท์ซ้ำหรือไม่
     if user_collection.find_one({"phone_number": user.phone_number}):
