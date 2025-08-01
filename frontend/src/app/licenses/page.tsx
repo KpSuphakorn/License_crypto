@@ -7,35 +7,15 @@ import Navbar from '@/components/Navbar';
 import 'react-datepicker/dist/react-datepicker.css';
 import { format } from 'date-fns';
 import CustomDatePicker from '@/components/DatePicker/DatePicker';
-
-interface License {
-  _id: string;
-  No: string;
-  username: string;
-  password?: string;
-  gmail: string;
-  mail_password?: string;
-  is_available?: boolean;
-  current_user?: string;
-  current_user_name?: string;
-  assigned_at?: string;
-  expires_at?: string;
-  reserved_by?: string;
-  reserved_by_name?: string;
-  reserved_at?: string;
-  queue_count?: number;
-  last_activity?: string;
-}
-
-interface UserInfo {
-  first_name: string;
-  last_name: string;
-  phone_number: string;
-  role?: 'admin' | 'user';
-  user_id?: string;
-}
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+import { License } from '@/types/license';
+import { UserInfo } from '@/types/user';
+import cleanupExpired from '@/libs/cleanupExpired';
+import getUser from '@/libs/getUser';
+import getLicenses from '@/libs/getLicenses';
+import requestLicense from '@/libs/requestLicense';
+import releaseLicense from '@/libs/releaseLicense';
+import cancelReservation from '@/libs/cancelReservation';
+import downloadLogs from '@/libs/downloadLogs';
 
 export default function LicenseManagementDashboard() {
   const [licenses, setLicenses] = useState<License[]>([]);
@@ -69,27 +49,18 @@ export default function LicenseManagementDashboard() {
       
       if (!isAutoRefresh) {
         try {
-          await fetch(`${API_BASE_URL}/licenses/cleanup-expired`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
+          await cleanupExpired();
         } catch (err) {
           console.warn('Failed to cleanup expired licenses:', err);
         }
       }
       
-      const licensesRes = await fetch(`${API_BASE_URL}/licenses`);
-      if (!licensesRes.ok) throw new Error('Failed to fetch licenses');
-      const licensesData = await licensesRes.json();
-      setLicenses(licensesData.licensess || []);
+      const licensesData = await getLicenses();
+      setLicenses(licensesData);
       setConnectionStatus('connected');
     } catch (err: unknown) {
       console.error('Failed to fetch licenses:', err);
       setConnectionStatus('disconnected');
-    } finally {
-      // Auto-refresh completed, no UI updates needed
     }
   };
 
@@ -99,13 +70,8 @@ export default function LicenseManagementDashboard() {
       try {
         const token = localStorage.getItem('token');
         if (!token) throw new Error('No token found');
-        const userRes = await fetch(`${API_BASE_URL}/auth`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!userRes.ok) throw new Error('Failed to fetch user info');
-        const userData = await userRes.json();
+        const userData = await getUser(token);
         setUserInfo(userData);
-
         await fetchLicenses();
       } catch (err: unknown) {
         console.error('Failed to fetch initial data:', err);
@@ -148,60 +114,38 @@ export default function LicenseManagementDashboard() {
     setRequestingLicense(license._id);
     try {
       await fetchLicenses();
-      const currentLicenses = await fetch(`${API_BASE_URL}/licenses`).then(res => res.json());
-      const currentLicense = currentLicenses.licensess?.find((l: License) => l._id === license._id);
+      const currentLicenses = await getLicenses();
+      const currentLicense = currentLicenses.find((l: License) => l._id === license._id);
       if (currentLicense && !currentLicense.is_available) {
         alert('This license is no longer available. It may have been taken by another user. Please select another one.');
-        setLicenses(currentLicenses.licensess || []);
+        setLicenses(currentLicenses);
         return;
       }
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/licenses/${license._id}/request`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 409) {
-          alert('This license was just taken by another user. Please select another one.');
-          await fetchLicenses();
-          return;
-        }
-        throw new Error(errorData.detail || 'Failed to request license');
-      }
-      
-      // Refresh the licenses list to show the updated state
+      if (!token) throw new Error('No authentication token found');
+      await requestLicense(license._id, token);
       await fetchLicenses();
       router.push(`/licenses/${license._id}?fromRequest=true`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An error occurred while requesting the license. Please try again.';
-      alert(errorMessage);
+      if (error instanceof Error && error.message.includes('409')) {
+        alert('This license was just taken by another user. Please select another one.');
+        await fetchLicenses();
+      } else {
+        alert(errorMessage);
+      }
     } finally {
       setRequestingLicense(null);
     }
   };
 
   const handleReleaseLicense = async (license: License) => {
-    if (releasingLicense) return; // Prevent multiple actions
-    
+    if (releasingLicense) return;
     setReleasingLicense(license._id);
-    
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/licenses/${license._id}/release`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to release license');
-      }
+      if (!token) throw new Error('No authentication token found');
+      await releaseLicense(license._id, token);
       await fetchLicenses();
       alert('License released successfully!');
     } catch (error: unknown) {
@@ -213,32 +157,15 @@ export default function LicenseManagementDashboard() {
   };
 
   const handleCancelReservation = async (license: License) => {
-    if (cancelingLicense) return; // Prevent multiple actions
-    
+    if (cancelingLicense) return;
     setCancelingLicense(license._id);
-    
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/licenses/${license._id}/cancel-reservation`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to cancel reservation');
-      }
-      
-      // Refresh the licenses list to show the updated state
+      if (!token) throw new Error('No authentication token found');
+      await cancelReservation(license._id, token);
       await fetchLicenses();
-      
       alert('Reservation cancelled successfully!');
-      
     } catch (error: unknown) {
-      console.error('Error cancelling reservation:', error);
       const errorMessage = error instanceof Error ? error.message : 'An error occurred while cancelling the reservation. Please try again.';
       alert(errorMessage);
     } finally {
@@ -262,27 +189,8 @@ export default function LicenseManagementDashboard() {
         }
       }
       const token = localStorage.getItem('token');
-      const queryParams = new URLSearchParams();
-      if (downloadFilters.start_date) queryParams.append('start_date', downloadFilters.start_date);
-      if (downloadFilters.end_date) queryParams.append('end_date', downloadFilters.end_date);
-      if (downloadFilters.user_id) queryParams.append('user_id', downloadFilters.user_id);
-      if (downloadFilters.license_id) queryParams.append('license_id', downloadFilters.license_id);
-      if (downloadFilters.action) queryParams.append('action', downloadFilters.action);
-      
-      const response = await fetch(`${API_BASE_URL}/usage-logs/download?${queryParams.toString()}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to download logs');
-      }
-      
-      const blob = await response.blob();
+      if (!token) throw new Error('No authentication token found');
+      const blob = await downloadLogs(downloadFilters, token);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -291,11 +199,9 @@ export default function LicenseManagementDashboard() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
       setShowDownloadModal(false);
       setDownloadFilters({ start_date: '', end_date: '', user_id: '', license_id: '', action: '' });
     } catch (error: unknown) {
-      console.error('Error downloading logs:', error);
       const errorMessage = error instanceof Error ? error.message : 'An error occurred while downloading logs. Please try again.';
       alert(errorMessage);
     }

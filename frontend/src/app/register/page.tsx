@@ -3,8 +3,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff, Phone, Lock, User, AlertCircle, CheckCircle, UserPlus, Mail } from 'lucide-react';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+import registerUser from '@/libs/registerUser';
 
 export default function RegisterPage() {
   const [firstName, setFirstName] = useState('');
@@ -60,26 +59,18 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          first_name: firstName,
-          last_name: lastName,
-          phone_number: cleanPhoneNumber,
-          email,
-          password,
-          rank,
-          position,
-          division,
-          bureau,
-          command,
-        }),
+      await registerUser({
+        first_name: firstName,
+        last_name: lastName,
+        phone_number: cleanPhoneNumber,
+        email,
+        password,
+        rank,
+        position,
+        division,
+        bureau,
+        command,
       });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Registration failed');
-      }
       setIsSuccess(true);
       setSuccess('ลงทะเบียนสำเร็จ! กำลังนำไปสู่หน้าเข้าสู่ระบบ...');
       
@@ -174,7 +165,7 @@ export default function RegisterPage() {
                   <User
                     size={20}
                     className={`absolute left-3 top-1/2 transform -translate-y-1/2 transition-colors duration-200 ${
-                      focusedField === 'firstName' ? 'text-blue-500' : 'text-gray-400'
+                      focusedField === 'lastName' ? 'text-blue-500' : 'text-gray-400'
                     }`}
                   />
                 </div>

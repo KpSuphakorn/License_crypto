@@ -14,30 +14,15 @@ import {
   Zap
 } from 'lucide-react';
 
-interface OtpData {
-  message: any;
-  otp: string;
-  from: string;
-  subject: string;
-  date: string;
-  license_id?: string;
-}
-
-interface LicenseData {
-  _id: string;
-  No: string;
-  username: string;
-  password: string;
-  gmail: string;
-  mail_password: string;
-  is_available?: boolean;
-  current_user?: string;
-  current_user_name?: string;
-  assigned_at?: string;
-  expires_at?: string;
-}
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+import getUser from '@/libs/getUser';
+import getLicense from '@/libs/getLicense';
+import activateLicense from '@/libs/activateLicense';
+import getOtp from '@/libs/getOtp';
+import extendLicense from '@/libs/extendLicense';
+import releaseLicense from '@/libs/releaseLicense';
+import refreshOtp from '@/libs/refreshOtp';
+import { OtpData } from '@/types/otp';
+import { LicenseData } from '@/types/license';
 
 export default function OtpPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -61,42 +46,18 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
           throw new Error('No authentication token found');
         }
 
-        const userRes = await fetch(`${API_BASE_URL}/auth`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!userRes.ok) throw new Error('Failed to fetch user info');
-        const userData = await userRes.json();
+        await getUser(token);
 
-        const licenseRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!licenseRes.ok) throw new Error(`License fetch error: ${licenseRes.status}`);
-        const licenseJson: LicenseData = await licenseRes.json();
-        
+        const licenseJson: LicenseData = await getLicense(licenseId, token);
         setLicenseData(licenseJson);
 
         try {
-          const activateRes = await fetch(`${API_BASE_URL}/licenses/${licenseId}/activate`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (!activateRes.ok) {
-            const errorData = await activateRes.json().catch(() => ({}));
-            if (activateRes.status !== 400 || !errorData.detail?.includes('already active')) {
-              throw new Error(errorData.detail || 'Failed to activate license');
-            }
-          } else {
-            const activateData = await activateRes.json();
-            if (activateData.expires_at) {
-              const expiresAt = new Date(activateData.expires_at);
-              const now = new Date();
-              const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
-              setTimeLeft(timeLeftSeconds);
-            }
+          const activateData = await activateLicense(licenseId, token);
+          if (activateData.expires_at) {
+            const expiresAt = new Date(activateData.expires_at);
+            const now = new Date();
+            const timeLeftSeconds = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
+            setTimeLeft(timeLeftSeconds);
           }
         } catch (activateError: unknown) {
           const errorMessage = activateError instanceof Error ? activateError.message : 'Unknown error';
@@ -106,25 +67,11 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
         }
 
         if (licenseJson.gmail) {
-          let licenseKey: string;
-          const licenseNo = licenseJson.No;
-          
-          if (licenseNo) {
-            const numericNo = parseInt(licenseNo, 10);
-            licenseKey = `license${numericNo}`;
-          } else {
+          if (!licenseJson.No) {
             throw new Error('License number not found');
           }
           
-          const otpUrl = `${API_BASE_URL}/otp/get?subject_keyword=Your one-time security code&license_id=${licenseKey}`;
-          const otpRes = await fetch(otpUrl);
-          
-          if (!otpRes.ok) {
-            const errorText = await otpRes.text();
-            throw new Error(`OTP fetch error: ${otpRes.status} - ${errorText}`);
-          }
-          
-          const otpJson: OtpData = await otpRes.json();
+          const otpJson: OtpData = await getOtp(licenseJson.No);
           
           if (otpJson.otp) {
             setOtpData(otpJson);
@@ -199,20 +146,9 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
       setIsExtending(true);
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_BASE_URL}/licenses/${licenseId}/extend`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        if (!token) throw new Error('No token found');
         
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'Failed to extend license');
-        }
-        
-        await response.json();
+        await extendLicense(licenseId, token);
         setTimeLeft(120 * 60);
         alert('License extended successfully!');
         
@@ -228,11 +164,8 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const handleRefreshOtp = async () => {
     setRefreshing(true);
     try {
-      if (!licenseData?.gmail) throw new Error('License email not found');
-      const licenseKey = `license${parseInt(licenseData.No, 10)}`;
-      const otpRes = await fetch(`${API_BASE_URL}/otp/get?subject_keyword=OTP&license_id=${licenseKey}`);
-      if (!otpRes.ok) throw new Error(`OTP refresh error: ${otpRes.status}`);
-      const otpJson: OtpData = await otpRes.json();
+      if (!licenseData?.No) throw new Error('License number not found');
+      const otpJson: OtpData = await refreshOtp(licenseData.No);
       setOtpData(otpJson);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to refresh OTP';
@@ -245,19 +178,9 @@ export default function OtpPage({ params }: { params: Promise<{ id: string }> })
   const handleFinish = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/licenses/${licenseId}/release`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      if (!token) throw new Error('No token found');
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to release license');
-      }
-      
+      await releaseLicense(licenseId, token);
       alert('License released successfully!');
       router.push('/licenses');
       

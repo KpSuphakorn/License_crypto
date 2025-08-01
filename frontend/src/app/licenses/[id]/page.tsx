@@ -4,25 +4,10 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Copy, Check, ArrowLeft, Mail, Key, Shield, User, RefreshCw } from 'lucide-react';
-
-interface LicenseDetails {
-  _id: string;
-  No: string;
-  username: string;
-  password: string;
-  gmail: string;
-  mail_password: string;
-  is_available?: boolean;
-  current_user?: string;
-  current_user_name?: string;
-  assigned_at?: string;
-  expires_at?: string;
-  reserved_by?: string;
-  reserved_by_name?: string;
-  reserved_at?: string;
-}
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+import { LicenseDetails } from '@/types/license';
+import getUser from '@/libs/getUser';
+import getLicense from '@/libs/getLicense';
+import releaseLicense from '@/libs/releaseLicense';
 
 export default function LicenseDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: licenseId } = React.use(params);
@@ -45,22 +30,8 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
           return;
         }
 
-        // First, get current user info
-        const userRes = await fetch(`${API_BASE_URL}/auth`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        
-        console.log('Auth response status:', userRes.status);
-        
-        if (!userRes.ok) {
-          console.error('Auth request failed:', {
-            status: userRes.status,
-            statusText: userRes.statusText
-          });
-          throw new Error('Failed to fetch user info');
-        }
-        
-        const userData = await userRes.json();
+        // Fetch current user info
+        const userData = await getUser(token);
         console.log('User data received:', userData);
         
         if (!userData || !userData.user_id) {
@@ -70,16 +41,8 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
         
         setCurrentUser(userData);
 
-        // Then get license details
-        const response = await fetch(`${API_BASE_URL}/licenses/${licenseId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data: LicenseDetails = await response.json();
+        // Fetch license details
+        const data = await getLicense(licenseId, token);
         
         // Check if user has permission to access this license
         const isAdmin = userData.role === 'admin';
@@ -166,18 +129,10 @@ export default function LicenseDetailsPage({ params }: { params: Promise<{ id: s
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/licenses/${licenseDetails._id}/release`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to release license');
+      if (!token) {
+        throw new Error('No authentication token found');
       }
+      await releaseLicense(licenseDetails._id, token);
       
       alert('License released successfully!');
       router.push('/licenses');
